@@ -707,6 +707,13 @@
                     return;
                 }
 
+                const decodedToken = liff.getDecodedIDToken();
+                if (!decodedToken || Number(decodedToken.exp || 0) * 1000 <= Date.now() + 60000) {
+                    liff.logout();
+                    liff.login({ redirectUri: window.location.href.split('?')[0] });
+                    return;
+                }
+
                 const profile = await liff.getProfile();
                 const idToken = liff.getIDToken();
                 if (!idToken) throw new Error('無法取得 LINE ID Token');
