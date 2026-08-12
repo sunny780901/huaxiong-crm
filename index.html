@@ -140,6 +140,25 @@
         input:focus, select:focus, textarea:focus { border-color: #3b82f6 !important; box-shadow: 0 0 0 4px rgba(59,130,246,.12) !important; background: #fff; outline: none; }
         button.bg-gold-600 { background: linear-gradient(135deg, #bd8d32, #8b6427) !important; box-shadow: 0 8px 18px rgba(139,100,39,.24); }
         .premium-footer { background: rgba(255,255,255,.86) !important; backdrop-filter: blur(14px); border-color: rgba(148,163,184,.25) !important; box-shadow: 0 -8px 24px rgba(23,48,78,.08) !important; }
+        .leave-rule { background: linear-gradient(135deg, #eef6ff, #f8fbff); border: 1px solid #cfe2fb; color: #315477; }
+        .calendar-shell { border: 1px solid rgba(148,163,184,.22); box-shadow: 0 16px 34px rgba(23,48,78,.10); }
+        .calendar-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .leave-calendar { min-width: 720px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: #dbe3ed; border: 1px solid #dbe3ed; border-radius: 1rem; overflow: hidden; }
+        .calendar-weekday { padding: .7rem .4rem; background: #173d62; color: #fff; text-align: center; font-size: .78rem; font-weight: 700; }
+        .calendar-weekday:first-child, .calendar-weekday:last-child { background: #78562a; }
+        .calendar-day { min-height: 112px; padding: .55rem; background: rgba(255,255,255,.97); }
+        .calendar-day.weekend { background: #fffaf2; }
+        .calendar-day.today { box-shadow: inset 0 0 0 2px #3b82f6; }
+        .calendar-empty { min-height: 112px; background: #f2f5f8; }
+        .calendar-day-number { color: #24364c; font-weight: 800; }
+        .working-note { display: inline-block; margin-top: .55rem; color: #94a3b8; font-size: .68rem; }
+        .leave-chip { display: flex; align-items: center; justify-content: space-between; gap: .3rem; margin-top: .35rem; padding: .35rem .42rem; border-radius: .55rem; font-size: .68rem; font-weight: 700; border-left: 3px solid currentColor; }
+        .leave-rest { color: #2563eb; background: #eaf2ff; }
+        .leave-sick { color: #dc4c64; background: #fff0f3; }
+        .leave-personal { color: #d97706; background: #fff4dc; }
+        .leave-annual { color: #059669; background: #e5f8ef; }
+        .leave-remove { flex: 0 0 auto; width: 1.25rem; height: 1.25rem; border-radius: 999px; background: rgba(255,255,255,.8); color: inherit; }
+        .calendar-nav { background: #edf3f8; color: #173d62; border: 1px solid #d5e0eb; box-shadow: 0 4px 10px rgba(23,48,78,.08); }
         .auth-icon { background: #10233f; color: #d4b063; }
         .auth-submit { display: block; width: 100%; margin-top: 0.75rem; padding: 0.85rem 1.25rem; border: 0; border-radius: 0.75rem; background: #10233f !important; color: #fff !important; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
         .auth-submit:disabled { opacity: 0.65; cursor: wait; }
@@ -160,9 +179,6 @@
     <header class="premium-header bg-gradient-to-r from-gold-700 to-gold-600 text-white shadow-md sticky top-0 z-50">
         <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
             <div class="flex items-center space-x-3">
-                <div class="brand-mark w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-bold text-lg border border-white/30">
-                    華
-                </div>
                 <div>
                     <h1 class="font-bold text-lg leading-tight">華雄天地 CRM</h1>
                     <p class="text-xs text-gold-100 opacity-90">高雄仁武精品建築</p>
@@ -594,33 +610,42 @@
                     <button onclick="switchView('dashboard')" class="text-gold-700 font-medium text-sm flex items-center">
                         <i class="fas fa-arrow-left mr-1"></i> 返回首頁
                     </button>
-                    <h2 class="text-xl font-bold text-gray-800">團隊排班管理</h2>
+                    <h2 class="text-xl font-bold text-gray-800">每月排休假表</h2>
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-gold-200 space-y-4">
-                    <h3 class="font-bold text-sm text-gold-800">登記 / 更新排班</h3>
+                    <div>
+                        <h3 class="font-bold text-base text-gold-800">登記休假</h3>
+                        <p class="leave-rule mt-3 rounded-xl p-3 text-sm"><i class="fas fa-circle-info mr-2"></i>未登記休假者皆視為上班；同一天最多兩人休假。</p>
+                    </div>
                     <form onsubmit="handleScheduleSubmit(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <select name="人員" required="" class="border border-gray-300 rounded-lg p-2.5 text-sm">
+                        <select id="schedule-staff-select" name="人員" required="" class="border border-gray-300 rounded-lg p-2.5 text-sm">
                             <option value="盧易方">盧易方</option>
                             <option value="呂冠美">呂冠美</option>
                             <option value="宋嬌琦">宋嬌琦</option>
                             <option value="芝妍Yan">芝妍Yan</option>
                         </select>
                         <input type="date" name="日期" required="" class="border border-gray-300 rounded-lg p-2.5 text-sm">
-                        <select name="狀態" class="border border-gray-300 rounded-lg p-2.5 text-sm">
-                            <option value="上班">上班</option>
-                            <option value="排休">排休</option>
-                            <option value="值班">值班</option>
+                        <select name="狀態" required="" class="border border-gray-300 rounded-lg p-2.5 text-sm">
+                            <option value="休假">休假</option>
+                            <option value="病假">病假</option>
+                            <option value="事假">事假</option>
+                            <option value="特休">特休</option>
                         </select>
-                        <button type="submit" class="sm:col-span-3 bg-gold-600 hover:bg-gold-700 text-white font-bold rounded-lg p-2.5 text-sm transition">儲存排班</button>
+                        <button type="submit" class="sm:col-span-3 bg-gold-600 hover:bg-gold-700 text-white font-bold rounded-lg p-2.5 text-sm transition">儲存休假</button>
                     </form>
                 </div>
 
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gold-200">
-                    <h3 class="font-bold text-sm text-gray-800 mb-3">排班一覽</h3>
-                    <div id="schedule-list-container" class="space-y-2">
-                        <!-- 動態生成排班清單 -->
+                <div class="calendar-shell bg-white p-4 rounded-2xl">
+                    <div class="flex items-center justify-between mb-4">
+                        <button type="button" onclick="changeScheduleMonth(-1)" class="calendar-nav rounded-xl px-3 py-2 text-sm font-bold"><i class="fas fa-chevron-left mr-1"></i>上月</button>
+                        <h3 id="schedule-month-label" class="font-bold text-lg text-gray-800"></h3>
+                        <button type="button" onclick="changeScheduleMonth(1)" class="calendar-nav rounded-xl px-3 py-2 text-sm font-bold">下月<i class="fas fa-chevron-right ml-1"></i></button>
                     </div>
+                    <div class="calendar-scroll">
+                        <div id="schedule-calendar" class="leave-calendar"></div>
+                    </div>
+                    <p class="mt-3 text-xs text-gray-500"><i class="fas fa-hand-pointer mr-1"></i>月曆只顯示休假人員；未列出者皆為上班。點假別右側 × 可取消休假。</p>
                 </div>
             </section>
 
@@ -659,6 +684,8 @@
             accessToken: '',
             lastErrorCode: ''
         };
+        let scheduleCalendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        const LEAVE_TYPES = ['休假', '病假', '事假', '特休'];
 
         window.addEventListener('DOMContentLoaded', async () => {
             // 初始化日期顯示
@@ -821,12 +848,14 @@
             document.getElementById('stat-today-appointments').innerText = appData.appointments.filter(a => a.狀態 === '待到訪').length;
             document.getElementById('stat-pending-tasks').innerText = appData.tasks.filter(t => t.狀態 === '待辦').length;
             document.getElementById('stat-closed-deals').innerText = appData.customers.filter(c => c.成交狀態 === '正式成交').length;
+            document.getElementById('welcome-title').innerText = `你好，${currentUser.name || '夥伴'}`;
 
             renderCustomerList();
             renderAppointmentsList();
             renderTasksList();
             renderMaintenanceList();
-            renderScheduleList();
+            renderScheduleStaffOptions();
+            renderScheduleCalendar();
             renderReportsChart();
         }
 
@@ -1017,31 +1046,89 @@
             `).join('');
         }
 
-        // 排班管理
+        // 月曆式排休管理：未登記者一律視為上班。
         async function handleScheduleSubmit(event) {
             event.preventDefault();
             const formData = new FormData(event.target);
             const data = Object.fromEntries(formData.entries());
             const res = await apiPost('updateSchedule', data);
             if (res) {
-                alert('排班更新成功！');
+                const selectedDate = new Date(data.日期 + 'T00:00:00');
+                scheduleCalendarMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                alert('休假登記成功！');
                 event.target.reset();
                 await fetchAllData();
             }
         }
 
-        function renderScheduleList() {
-            const container = document.getElementById('schedule-list-container');
-            if (appData.schedules.length === 0) {
-                container.innerHTML = '<p class="text-center text-gray-500 py-4 text-sm">目前無排班資料</p>';
-                return;
+        function renderScheduleStaffOptions() {
+            const select = document.getElementById('schedule-staff-select');
+            if (!select) return;
+            const names = [...new Set((appData.users || []).map(user => user.姓名).filter(Boolean))];
+            if (!names.length) return;
+            select.innerHTML = names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+        }
+
+        function changeScheduleMonth(offset) {
+            scheduleCalendarMonth = new Date(scheduleCalendarMonth.getFullYear(), scheduleCalendarMonth.getMonth() + offset, 1);
+            renderScheduleCalendar();
+        }
+
+        function renderScheduleCalendar() {
+            const container = document.getElementById('schedule-calendar');
+            const label = document.getElementById('schedule-month-label');
+            if (!container || !label) return;
+
+            const year = scheduleCalendarMonth.getFullYear();
+            const month = scheduleCalendarMonth.getMonth();
+            const firstWeekday = new Date(year, month, 1).getDay();
+            const dayCount = new Date(year, month + 1, 0).getDate();
+            const today = formatDateKey(new Date());
+            const leaveRows = (appData.schedules || []).filter(row => LEAVE_TYPES.includes(String(row.狀態 || '')));
+            label.innerText = `${year}年${month + 1}月`;
+
+            let html = ['日', '一', '二', '三', '四', '五', '六']
+                .map(day => `<div class="calendar-weekday">${day}</div>`).join('');
+            html += '<div class="calendar-empty"></div>'.repeat(firstWeekday);
+
+            for (let day = 1; day <= dayCount; day++) {
+                const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const weekday = new Date(year, month, day).getDay();
+                const rows = leaveRows.filter(row => String(row.日期) === dateKey);
+                const chips = rows.map(row => `
+                    <div class="leave-chip ${leaveClass(row.狀態)}">
+                        <span>${escapeHtml(row.人員)}・${escapeHtml(row.狀態)}</span>
+                        <button type="button" class="leave-remove" aria-label="取消${escapeHtml(row.人員)}休假" onclick="deleteScheduleEntry('${row.id}')">×</button>
+                    </div>`).join('');
+                html += `
+                    <div class="calendar-day ${weekday === 0 || weekday === 6 ? 'weekend' : ''} ${dateKey === today ? 'today' : ''}">
+                        <span class="calendar-day-number">${day}</span>
+                        ${chips || '<span class="working-note">全員上班</span>'}
+                        ${rows.length ? '<span class="working-note">其餘人員上班</span>' : ''}
+                    </div>`;
             }
-            container.innerHTML = appData.schedules.map(s => `
-                <div class="p-2.5 bg-gray-50 rounded-lg border border-gray-200 flex justify-between items-center text-sm">
-                    <span class="font-medium text-gray-800">${s.日期} - ${s.人員}</span>
-                    <span class="text-xs px-2 py-0.5 rounded font-bold ${s.狀態 === '上班' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${s.狀態}</span>
-                </div>
-            `).join('');
+            container.innerHTML = html;
+        }
+
+        async function deleteScheduleEntry(id) {
+            const row = (appData.schedules || []).find(item => String(item.id) === String(id));
+            if (!row || !confirm(`確定取消 ${row.人員} 在 ${row.日期} 的${row.狀態}嗎？`)) return;
+            const res = await apiPost('deleteSchedule', {}, id);
+            if (res) {
+                await fetchAllData();
+            }
+        }
+
+        function leaveClass(type) {
+            return { '休假': 'leave-rest', '病假': 'leave-sick', '事假': 'leave-personal', '特休': 'leave-annual' }[type] || 'leave-rest';
+        }
+
+        function formatDateKey(date) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
         }
 
         // Chart.js 統計圖表
