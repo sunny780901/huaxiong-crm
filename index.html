@@ -682,7 +682,8 @@
             idToken: '',
             accessCode: '',
             accessToken: '',
-            lastErrorCode: ''
+            lastErrorCode: '',
+            lastErrorMessage: ''
         };
         let scheduleCalendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
         const LEAVE_TYPES = ['休假', '病假', '事假', '特休'];
@@ -790,7 +791,7 @@
             currentUser.accessCode = '';
             input.value = '';
             input.focus();
-            error.innerText = '密碼錯誤，或此 LINE 帳號尚未列入使用者白名單。';
+            error.innerText = currentUser.lastErrorMessage || '密碼錯誤，或此 LINE 帳號尚未列入使用者白名單。';
             error.classList.remove('hidden');
             button.disabled = false;
             button.innerText = '驗證並進入 CRM';
@@ -892,6 +893,7 @@
                 const result = await response.json();
                 if (result.status === 'success') {
                     currentUser.lastErrorCode = '';
+                    currentUser.lastErrorMessage = '';
                     if (result.meta && result.meta.accessToken) {
                         currentUser.accessToken = result.meta.accessToken;
                         localStorage.setItem(AUTH_SESSION_KEY, currentUser.accessToken);
@@ -899,9 +901,11 @@
                     return result.data;
                 } else {
                     currentUser.lastErrorCode = result.code || 'REQUEST_FAILED';
+                    currentUser.lastErrorMessage = result.message || '操作失敗';
                     throw new Error(result.message);
                 }
             } catch (err) {
+                currentUser.lastErrorMessage = currentUser.lastErrorMessage || err.message || '網路連線失敗';
                 if (!suppressAlert) alert('操作失敗: ' + err.message);
                 return null;
             }
