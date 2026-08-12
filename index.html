@@ -277,7 +277,7 @@
                             </div>
                             <span class="font-bold text-gray-800 text-sm block">任務系統</span>
                         </button>
-                        <button onclick="switchView('reports')" class="bg-white p-5 rounded-2xl shadow-xs border border-gold-200 hover:border-gold-500 hover:shadow-md transition text-center group">
+                        <button id="reports-module" onclick="switchView('reports')" class="bg-white p-5 rounded-2xl shadow-xs border border-gold-200 hover:border-gold-500 hover:shadow-md transition text-center group">
                             <div class="w-12 h-12 mx-auto bg-gold-100 text-gold-700 rounded-xl flex items-center justify-center text-xl mb-3 group-hover:bg-gold-600 group-hover:text-white transition">
                                 <i class="fas fa-chart-pie"></i>
                             </div>
@@ -294,6 +294,12 @@
                                 <i class="fas fa-calendar-alt"></i>
                             </div>
                         <span class="font-bold text-gray-800 text-sm block">排班管理</span>
+                        </button>
+                        <button id="users-module" onclick="switchView('users')" class="hidden bg-white p-5 rounded-2xl shadow-xs border border-gold-200 hover:border-gold-500 hover:shadow-md transition text-center group">
+                            <div class="w-12 h-12 mx-auto bg-indigo-100 text-indigo-700 rounded-xl flex items-center justify-center text-xl mb-3 group-hover:bg-indigo-600 group-hover:text-white transition">
+                                <i class="fas fa-user-shield"></i>
+                            </div>
+                            <span class="font-bold text-gray-800 text-sm block">使用者管理</span>
                         </button>
                     </div>
                 </div>
@@ -320,7 +326,7 @@
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-700 mb-1">接待人員</label>
-                            <select name="接待人員" required="" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm">
+                            <select id="customer-staff-select" name="接待人員" required="" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm">
                                 <option value="盧易方">盧易方</option>
                                 <option value="呂冠美">呂冠美</option>
                                 <option value="宋嬌琦">宋嬌琦</option>
@@ -690,6 +696,43 @@
                 </div>
             </section>
 
+            <!-- 9. 使用者管理（僅專案經理） -->
+            <section id="view-users" class="space-y-6 view-section hidden">
+                <div class="flex items-center justify-between">
+                    <button onclick="switchView('dashboard')" class="text-gold-700 font-medium text-sm flex items-center">
+                        <i class="fas fa-arrow-left mr-1"></i> 返回首頁
+                    </button>
+                    <h2 class="text-xl font-bold text-gray-800">使用者管理</h2>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gold-200 space-y-4">
+                    <div>
+                        <h3 id="user-form-title" class="font-bold text-base text-gold-800">新增使用者</h3>
+                        <p class="mt-1 text-xs text-gray-500">LINE ID 必須與同仁登入 LINE 的帳號一致。</p>
+                    </div>
+                    <form id="user-management-form" onsubmit="handleUserSubmit(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <input type="hidden" name="id">
+                        <input type="text" name="姓名" required placeholder="同仁姓名" class="border border-gray-300 rounded-lg p-2.5 text-sm">
+                        <input type="text" name="lineId" required placeholder="LINE User ID" class="border border-gray-300 rounded-lg p-2.5 text-sm font-mono">
+                        <select name="職稱" required class="border border-gray-300 rounded-lg p-2.5 text-sm">
+                            <option value="專案經理">專案經理</option>
+                            <option value="行政副理">行政副理</option>
+                            <option value="銷售主任">銷售主任</option>
+                        </select>
+                        <button id="user-submit-button" type="submit" class="sm:col-span-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg p-2.5 text-sm transition">新增使用者</button>
+                        <button type="button" onclick="resetUserForm()" class="border border-gray-300 text-gray-600 font-bold rounded-lg p-2.5 text-sm hover:bg-gray-50 transition">清除</button>
+                    </form>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gold-200">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-bold text-sm text-gray-800">使用者名單</h3>
+                        <span class="text-xs text-gray-500">共 <span id="user-count">0</span> 人</span>
+                    </div>
+                    <div id="user-management-list" class="space-y-3"></div>
+                </div>
+            </section>
+
         </div>
     </main>
 
@@ -724,6 +767,8 @@
             lineAccessToken: '',
             accessCode: '',
             accessToken: '',
+            role: '',
+            permissions: { viewReports: false, manageUsers: false, viewAllCustomers: false },
             lastErrorCode: '',
             lastErrorMessage: ''
         };
@@ -789,7 +834,7 @@
             if (currentUser.accessToken) {
                 const data = await apiPost('getAll', {}, null, true);
                 if (data) {
-                    appData = data;
+                    acceptAppData(data);
                     initAppUI();
                     return;
                 }
@@ -843,7 +888,7 @@
             const data = await apiPost('getAll', {}, null, true);
             if (data) {
                 currentUser.accessCode = '';
-                appData = data;
+                acceptAppData(data);
                 initAppUI();
                 return;
             }
@@ -874,7 +919,7 @@
             try {
                 const data = await apiPost('getAll', {});
                 if (!data) return;
-                appData = data;
+                acceptAppData(data);
                 initAppUI();
             } catch (err) {
                 console.error(err);
@@ -900,6 +945,17 @@
             initAppUI();
         }
 
+        function acceptAppData(data) {
+            appData = data || appData;
+            if (data && data.session) {
+                currentUser.name = data.session.name || currentUser.name;
+                currentUser.lineId = data.session.lineId || currentUser.lineId;
+                currentUser.role = data.session.role || '';
+                currentUser.permissions = data.session.permissions || currentUser.permissions;
+                document.getElementById('user-name').innerText = `${currentUser.name}${currentUser.role ? '｜' + currentUser.role : ''}`;
+            }
+        }
+
         function initAppUI() {
             document.getElementById('loading-screen').classList.add('hidden');
             document.getElementById('app-container').classList.remove('hidden');
@@ -911,6 +967,8 @@
             document.getElementById('stat-closed-deals').innerText = appData.customers.filter(c => c.成交狀態 === '正式成交').length;
             document.getElementById('welcome-title').innerText = `你好，${currentUser.name || '夥伴'}`;
 
+            applyRolePermissions();
+            renderCustomerStaffOptions();
             renderCustomerList();
             renderAppointmentsList();
             renderTasksList();
@@ -918,12 +976,36 @@
             renderScheduleStaffOptions();
             renderScheduleCalendar();
             renderReportsChart();
+            renderUserManagement();
         }
 
         function switchView(viewId) {
+            if (viewId === 'reports' && !currentUser.permissions.viewReports) {
+                alert('你的職級無法查看銷售日報統計。');
+                return;
+            }
+            if (viewId === 'users' && !currentUser.permissions.manageUsers) {
+                alert('只有專案經理可以管理使用者。');
+                return;
+            }
             document.querySelectorAll('.view-section').forEach(sec => sec.classList.add('hidden'));
             document.getElementById('view-' + viewId).classList.remove('hidden');
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function applyRolePermissions() {
+            document.getElementById('reports-module')?.classList.toggle('hidden', !currentUser.permissions.viewReports);
+            document.getElementById('users-module')?.classList.toggle('hidden', !currentUser.permissions.manageUsers);
+        }
+
+        function renderCustomerStaffOptions() {
+            const select = document.getElementById('customer-staff-select');
+            if (!select) return;
+            let names = [...new Set((appData.users || []).map(user => user.姓名).filter(Boolean))];
+            if (currentUser.role === '銷售主任') names = [currentUser.name];
+            if (!names.length) names = [currentUser.name].filter(Boolean);
+            select.innerHTML = names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+            if (currentUser.role === '銷售主任') select.disabled = true;
         }
 
         // 通用 API 請求方法
@@ -977,6 +1059,7 @@
             event.preventDefault();
             const formData = new FormData(event.target);
             const data = Object.fromEntries(formData.entries());
+            if (currentUser.role === '銷售主任') data.接待人員 = currentUser.name;
 
             const res = await apiPost('addCustomer', data);
             if (res) {
@@ -1018,6 +1101,87 @@
                     </div>
                 </div>
             `).join('');
+        }
+
+        // 使用者與角色管理（僅專案經理可操作）。
+        function renderUserManagement() {
+            const container = document.getElementById('user-management-list');
+            if (!container || !currentUser.permissions.manageUsers) return;
+            const users = appData.users || [];
+            document.getElementById('user-count').innerText = users.length;
+            if (!users.length) {
+                container.innerHTML = '<p class="text-center text-gray-500 py-5 text-sm">目前沒有使用者資料</p>';
+                return;
+            }
+            const roleStyle = {
+                '專案經理': 'bg-amber-100 text-amber-800',
+                '行政副理': 'bg-blue-100 text-blue-800',
+                '銷售主任': 'bg-emerald-100 text-emerald-800'
+            };
+            container.innerHTML = users.map(user => {
+                const isSelf = String(user.lineId || '') === String(currentUser.lineId || '');
+                return `
+                    <div class="rounded-xl border border-gray-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-bold text-gray-800">${escapeHtml(user.姓名 || '')}</span>
+                                <span class="text-xs px-2 py-1 rounded-full ${roleStyle[user.職稱] || 'bg-gray-100 text-gray-700'}">${escapeHtml(user.職稱 || '')}</span>
+                                ${isSelf ? '<span class="text-xs text-gold-700 font-bold">目前帳號</span>' : ''}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500 font-mono break-all">${escapeHtml(user.lineId || '')}</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="button" onclick="editUser('${user.id}')" class="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100">編輯</button>
+                            <button type="button" onclick="removeUser('${user.id}')" ${isSelf ? 'disabled' : ''} class="px-3 py-2 rounded-lg text-xs font-bold ${isSelf ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-50 text-red-700 hover:bg-red-100'}">刪除</button>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        async function handleUserSubmit(event) {
+            event.preventDefault();
+            if (!currentUser.permissions.manageUsers) return;
+            const form = event.target;
+            const values = Object.fromEntries(new FormData(form).entries());
+            const id = values.id || '';
+            delete values.id;
+            const result = await apiPost(id ? 'updateUser' : 'addUser', values, id || null);
+            if (!result) return;
+            alert(id ? '使用者資料已更新！' : '使用者已新增！');
+            resetUserForm();
+            await fetchAllData();
+            switchView('users');
+        }
+
+        function editUser(id) {
+            const user = (appData.users || []).find(item => String(item.id) === String(id));
+            if (!user) return;
+            const form = document.getElementById('user-management-form');
+            form.elements.id.value = user.id || '';
+            form.elements.姓名.value = user.姓名 || '';
+            form.elements.lineId.value = user.lineId || '';
+            form.elements.職稱.value = user.職稱 || '銷售主任';
+            document.getElementById('user-form-title').innerText = '編輯使用者';
+            document.getElementById('user-submit-button').innerText = '儲存修改';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function resetUserForm() {
+            const form = document.getElementById('user-management-form');
+            if (!form) return;
+            form.reset();
+            form.elements.id.value = '';
+            document.getElementById('user-form-title').innerText = '新增使用者';
+            document.getElementById('user-submit-button').innerText = '新增使用者';
+        }
+
+        async function removeUser(id) {
+            const user = (appData.users || []).find(item => String(item.id) === String(id));
+            if (!user || !confirm(`確定要移除 ${user.姓名} 的 CRM 使用權限嗎？`)) return;
+            const result = await apiPost('deleteUser', {}, id);
+            if (!result) return;
+            await fetchAllData();
+            switchView('users');
         }
 
         // 預約管理
