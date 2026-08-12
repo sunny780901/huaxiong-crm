@@ -343,31 +343,58 @@
                             <input type="tel" name="電話" required="" placeholder="0912-345678" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-700 mb-1">年齡區間</label>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">年齡</label>
                             <select name="年齡區間" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm">
-                                <option value="20-30歲">20-30歲</option>
-                                <option value="31-40歲">31-40歲</option>
-                                <option value="41-50歲">41-50歲</option>
-                                <option value="51-60歲">51-60歲</option>
-                                <option value="60歲以上">60歲以上</option>
+                                <option value="20以下">20以下</option>
+                                <option value="21-25">21-25</option>
+                                <option value="26-30">26-30</option>
+                                <option value="31-35">31-35</option>
+                                <option value="36-40">36-40</option>
+                                <option value="41-45">41-45</option>
+                                <option value="46-50">46-50</option>
+                                <option value="51-55">51-55</option>
+                                <option value="56-60">56-60</option>
+                                <option value="61-65">61-65</option>
+                                <option value="66以上">66以上</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-700 mb-1">居住行政區</label>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">居住區域</label>
                             <select name="居住行政區" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm">
-                                <option value="仁武區">仁武區</option>
-                                <option value="左營區">左營區</option>
-                                <option value="楠梓區">楠梓區</option>
                                 <option value="三民區">三民區</option>
+                                <option value="左營區">左營區</option>
                                 <option value="鼓山區">鼓山區</option>
+                                <option value="仁武區">仁武區</option>
+                                <option value="苓雅區">苓雅區</option>
+                                <option value="鳥松區">鳥松區</option>
+                                <option value="橋頭區">橋頭區</option>
+                                <option value="大社區">大社區</option>
+                                <option value="楠梓區">楠梓區</option>
                                 <option value="鳳山區">鳳山區</option>
-                                <option value="其他高雄行政區">其他高雄行政區</option>
+                                <option value="市區">市區</option>
+                                <option value="市郊區">市郊區</option>
                                 <option value="外縣市">外縣市</option>
                             </select>
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-700 mb-1">職業</label>
-                            <input type="text" name="職業" placeholder="例如：科技業、公教、自營商" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm">
+                            <select name="職業" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm">
+                                <option value="軍.警">軍.警</option>
+                                <option value="公">公</option>
+                                <option value="教">教</option>
+                                <option value="自營商">自營商</option>
+                                <option value="電子業">電子業</option>
+                                <option value="傳產">傳產</option>
+                                <option value="服務業">服務業</option>
+                                <option value="上班族">上班族</option>
+                                <option value="金融業">金融業</option>
+                                <option value="自由業">自由業</option>
+                                <option value="醫.律">醫.律</option>
+                                <option value="家管">家管</option>
+                                <option value="退休">退休</option>
+                                <option value="其他">其他</option>
+                                <option value="護士">護士</option>
+                            </select>
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-700 mb-1">購屋動機</label>
@@ -376,16 +403,24 @@
                                 <option value="換屋自住">換屋自住</option>
                                 <option value="置產收租">置產收租</option>
                                 <option value="為小孩置產">為小孩置產</option>
+                                <option value="房產投資">房產投資</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-700 mb-1">來源管道</label>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">媒體來源</label>
                             <select name="來源管道" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm">
-                                <option value="路過看板">路過看板</option>
-                                <option value="網路廣告">網路廣告 (FB/IG/Google)</option>
-                                <option value="親友介紹">親友介紹</option>
-                                <option value="派報傳單">派報傳單</option>
-                                <option value="老客戶">老客戶</option>
+                                <option value="POP">POP</option>
+                                <option value="路過">路過</option>
+                                <option value="FB">FB</option>
+                                <option value="591">591</option>
+                                <option value="公車">公車</option>
+                                <option value="ET">ET</option>
+                                <option value="介紹">介紹</option>
+                                <option value="網路">網路</option>
+                                <option value="樂居">樂居</option>
+                                <option value="邀約">邀約</option>
+                                <option value="RD">RD</option>
+                                <option value="YT">YT</option>
                             </select>
                         </div>
                         <div>
@@ -393,7 +428,8 @@
                             <select name="需求房型" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm">
                                 <option value="2房">2房</option>
                                 <option value="3房">3房</option>
-                                <option value="店面">店面</option>
+                                <option value="4房">4房</option>
+                                <option value="5房">5房</option>
                             </select>
                         </div>
                         <div>
@@ -569,7 +605,7 @@
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-gold-200">
-                    <h3 class="font-bold text-sm text-gray-800 mb-4">來源管道佔比統計</h3>
+                    <h3 class="font-bold text-sm text-gray-800 mb-4">媒體來源佔比統計</h3>
                     <div class="w-full max-w-xs mx-auto">
                         <canvas id="sourceChart"></canvas>
                     </div>
