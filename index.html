@@ -535,7 +535,8 @@
             name: '訪客',
             avatar: '',
             lineId: '',
-            idToken: ''
+            idToken: '',
+            accessCode: ''
         };
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -583,9 +584,56 @@
                 return;
             }
 
-            // 載入資料
-            await fetchAllData();
+            // LINE 身分確認後，仍須通過後端密碼與使用者白名單。
+            showAccessCodePrompt();
         });
+
+        function showAccessCodePrompt(message = '') {
+            document.getElementById('loading-screen').innerHTML = `
+                <div class="text-center p-6 bg-white border border-gold-200 rounded-2xl max-w-md mx-auto shadow-sm">
+                    <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-navy-900 text-gold-400 flex items-center justify-center">
+                        <i class="fas fa-lock text-2xl"></i>
+                    </div>
+                    <h3 class="font-bold text-gray-800 text-lg mb-2">同仁身分驗證</h3>
+                    <p class="text-sm text-gray-600 mb-4">請輸入華雄天地 CRM 存取密碼。系統仍會核對你的 LINE 帳號與使用者白名單。</p>
+                    <form onsubmit="unlockCRM(event)" class="space-y-3">
+                        <input id="access-code-input" type="password" inputmode="numeric" autocomplete="current-password"
+                            class="w-full border border-gray-300 rounded-xl px-4 py-3 text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-gold-400"
+                            placeholder="請輸入存取密碼" required autofocus>
+                        <p id="access-code-error" class="${message ? '' : 'hidden'} text-sm text-red-600">${message}</p>
+                        <button id="access-code-submit" type="submit"
+                            class="w-full bg-navy-900 text-white px-5 py-3 rounded-xl text-sm font-bold hover:bg-navy-800">
+                            驗證並進入 CRM
+                        </button>
+                    </form>
+                </div>`;
+        }
+
+        async function unlockCRM(event) {
+            event.preventDefault();
+            const input = document.getElementById('access-code-input');
+            const button = document.getElementById('access-code-submit');
+            const error = document.getElementById('access-code-error');
+            currentUser.accessCode = input.value;
+            button.disabled = true;
+            button.innerText = '驗證中...';
+            error.classList.add('hidden');
+
+            const data = await apiPost('getAll', {}, null, true);
+            if (data) {
+                appData = data;
+                initAppUI();
+                return;
+            }
+
+            currentUser.accessCode = '';
+            input.value = '';
+            input.focus();
+            error.innerText = '密碼錯誤，或此 LINE 帳號尚未列入使用者白名單。';
+            error.classList.remove('hidden');
+            button.disabled = false;
+            button.innerText = '驗證並進入 CRM';
+        }
 
         async function fetchAllData() {
             if (SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL') {
@@ -655,7 +703,7 @@
         }
 
         // 通用 API 請求方法
-        async function apiPost(action, data, id = null) {
+        async function apiPost(action, data, id = null, suppressAlert = false) {
             if (SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL') {
                 alert('尚未設定 SCRIPT_URL，無法寫入資料！');
                 return null;
@@ -664,10 +712,14 @@
                 alert('LINE 登入已失效，請關閉後重新開啟系統。');
                 return null;
             }
+            if (!currentUser.accessCode) {
+                if (!suppressAlert) alert('請先輸入 CRM 存取密碼。');
+                return null;
+            }
             try {
                 const response = await fetch(SCRIPT_URL, {
                     method: 'POST',
-                    body: JSON.stringify({ action, data, id, idToken: currentUser.idToken })
+                    body: JSON.stringify({ action, data, id, idToken: currentUser.idToken, accessCode: currentUser.accessCode })
                 });
                 const result = await response.json();
                 if (result.status === 'success') {
@@ -676,7 +728,7 @@
                     throw new Error(result.message);
                 }
             } catch (err) {
-                alert('操作失敗: ' + err.message);
+                if (!suppressAlert) alert('操作失敗: ' + err.message);
                 return null;
             }
         }
