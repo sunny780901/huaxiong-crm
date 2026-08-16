@@ -202,6 +202,17 @@
         .report-summary-card:nth-child(3) { --report-accent: #059669; }
         .report-summary-card span { color: #7c8492; font-size: .74rem; font-weight: 700; }
         .report-summary-card strong { display: block; margin-top: .35rem; color: #10233f; font-family: Georgia, serif; font-size: 2rem; line-height: 1; }
+        .report-staff-card { overflow: hidden; border: 1px solid rgba(148,163,184,.22); border-radius: 1.15rem; background: rgba(255,255,255,.98); box-shadow: 0 12px 28px rgba(23,48,78,.08); }
+        .report-staff-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.15rem; color: #fff; background: linear-gradient(135deg,#173d62,#0f766e); }
+        .report-staff-head h3 { font-weight: 900; }
+        .report-staff-head p { color: rgba(255,255,255,.74); font-size: .7rem; }
+        .report-table-scroll { overflow-x: auto; }
+        .report-staff-table { width: 100%; min-width: 650px; border-collapse: collapse; }
+        .report-staff-table th { padding: .78rem .85rem; color: #607087; background: #f4f7fa; font-size: .7rem; font-weight: 900; text-align: center; white-space: nowrap; }
+        .report-staff-table th:first-child, .report-staff-table td:first-child { text-align: left; }
+        .report-staff-table td { padding: .85rem; border-top: 1px solid #edf0f3; color: #27364a; font-size: .78rem; font-weight: 700; text-align: center; }
+        .report-staff-table tbody tr:hover { background: #f7fbfb; }
+        .report-ratio { display: inline-flex; min-width: 3.6rem; justify-content: center; padding: .3rem .55rem; border-radius: 999px; color: #0f766e; background: #e4f5f1; }
         .report-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1rem; }
         .report-chart-card { min-width: 0; padding: 1.15rem; border: 1px solid rgba(148,163,184,.22); border-radius: 1.15rem; background: rgba(255,255,255,.97); box-shadow: 0 12px 28px rgba(23,48,78,.08); }
         .report-chart-card:first-child { grid-row: span 2; }
@@ -754,6 +765,23 @@
                         <div class="report-summary-card"><span>回籠組數</span><strong id="report-return-count">0</strong></div>
                         <div class="report-summary-card"><span>成交件數</span><strong id="report-deal-count">0</strong></div>
                     </div>
+                </div>
+
+                <div class="report-staff-card">
+                    <div class="report-staff-head">
+                        <div>
+                            <h3><i class="fas fa-people-group mr-2"></i>各銷售人員業績</h3>
+                            <p class="mt-1">初訪／回籠依訪客日期；成交依成交日期計算</p>
+                        </div>
+                        <span id="report-staff-count" class="text-xs font-bold">0 人</span>
+                    </div>
+                    <div class="report-table-scroll">
+                        <table class="report-staff-table">
+                            <thead><tr><th>銷售人員</th><th>初訪組數</th><th>回籠組數</th><th>成交件數</th><th>回籠率</th><th>成交比</th></tr></thead>
+                            <tbody id="report-staff-body"></tbody>
+                        </table>
+                    </div>
+                    <p id="report-staff-empty" class="report-empty-note hidden">此期間尚無銷售人員資料</p>
                 </div>
 
                 <div class="report-chart-grid">
@@ -1419,11 +1447,12 @@
             const now = new Date();
             const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
             const monthRows = customers.filter(row => String(row.訪客日期 || '').startsWith(monthKey));
+            const monthDeals = customers.filter(row => String(row.成交狀態 || '') === '正式成交' && getReportDealDate(row).startsWith(monthKey));
             document.getElementById('ops-total-customers').innerText = customers.length;
             document.getElementById('ops-month-visits').innerText = monthRows.length;
             document.getElementById('ops-first-visits').innerText = monthRows.filter(row => row.訪客類別 === '初訪').length;
             document.getElementById('ops-revisits').innerText = monthRows.filter(row => row.訪客類別 === '回籠').length;
-            document.getElementById('ops-deals').innerText = monthRows.filter(row => row.成交狀態 === '正式成交').length;
+            document.getElementById('ops-deals').innerText = monthDeals.length;
             renderPendingSignatures(customers);
             renderStaffReceptionStats(monthRows);
             renderTeamStaffFilters();
@@ -1600,6 +1629,7 @@
                         <div><label class="block text-xs font-bold text-gray-700 mb-1">成交戶別</label><input name="成交戶別" value="${escapeHtml(customer.成交戶別 || '')}" required placeholder="例如：A1/3F" class="w-full border border-gray-300 rounded-xl p-3 text-sm"></div>
                         <div><label class="block text-xs font-bold text-gray-700 mb-1">車位編號</label><input name="車位編號" value="${escapeHtml(customer.車位編號 || '')}" placeholder="例如：B3-112" class="w-full border border-gray-300 rounded-xl p-3 text-sm"></div>
                         <div><label class="block text-xs font-bold text-gray-700 mb-1">成交總價</label><input name="成交總價" value="${escapeHtml(customer.成交總價 || '')}" placeholder="例如：1400萬" class="w-full border border-gray-300 rounded-xl p-3 text-sm"></div>
+                        <div><label class="block text-xs font-bold text-gray-700 mb-1">成交日期</label><input type="date" name="成交日期" value="${escapeHtml(customer.成交日期 || formatDateKey(new Date()))}" required class="w-full border border-gray-300 rounded-xl p-3 text-sm"></div>
                         <div><label class="block text-xs font-bold text-gray-700 mb-1">預定簽約日</label><input type="date" name="預定簽約日" value="${escapeHtml(customer.預定簽約日 || '')}" class="w-full border border-gray-300 rounded-xl p-3 text-sm"></div>
                     </div>
                     <div><label class="block text-xs font-bold text-gray-700 mb-1">簽約狀態</label><select name="簽約狀態" class="w-full border border-gray-300 rounded-xl p-3 text-sm">
@@ -1968,6 +1998,48 @@
             return Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-TW'));
         }
 
+        function getReportDealDate(row) {
+            if (String(row.成交狀態 || '') !== '正式成交') return '';
+            return String(row.成交日期 || row.最後更新時間 || '').slice(0, 10);
+        }
+
+        function renderSalesStaffStats(visitRows, dealRows) {
+            const body = document.getElementById('report-staff-body');
+            const empty = document.getElementById('report-staff-empty');
+            const count = document.getElementById('report-staff-count');
+            if (!body) return;
+
+            const names = [...new Set([
+                ...(appData.users || []).filter(user => user.職稱 === '銷售主任').map(user => user.姓名),
+                ...visitRows.map(row => row.接待人員),
+                ...dealRows.map(row => row.接待人員)
+            ].map(name => String(name || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-TW'));
+
+            count.textContent = `${names.length} 人`;
+            empty?.classList.toggle('hidden', names.length > 0);
+            if (!names.length) {
+                body.innerHTML = '';
+                return;
+            }
+
+            body.innerHTML = names.map(name => {
+                const staffVisits = visitRows.filter(row => String(row.接待人員 || '').trim() === name);
+                const first = staffVisits.filter(row => String(row.訪客類別 || '') === '初訪').length;
+                const returns = staffVisits.filter(row => ['回籠', '再訪'].includes(String(row.訪客類別 || ''))).length;
+                const deals = dealRows.filter(row => String(row.接待人員 || '').trim() === name).length;
+                const returnRate = first ? `${(returns / first * 100).toFixed(1)}%` : '—';
+                const conversionRatio = deals ? `1:${Math.round(first / deals)}` : '—';
+                return `<tr>
+                    <td>${escapeHtml(name)}</td>
+                    <td>${first}</td>
+                    <td>${returns}</td>
+                    <td>${deals}</td>
+                    <td>${returnRate}</td>
+                    <td><span class="report-ratio">${conversionRatio}</span></td>
+                </tr>`;
+            }).join('');
+        }
+
         function renderSalesReports() {
             const periodInput = document.getElementById('report-anchor-date');
             if (!periodInput) return;
@@ -1976,20 +2048,25 @@
             const { start, end } = getReportRange();
             const startKey = formatDateKey(start);
             const endKey = formatDateKey(end);
-            const rows = (appData.teamCustomers || []).filter(row => {
+            const visitRows = (appData.teamCustomers || []).filter(row => {
                 const visitDate = String(row.訪客日期 || '').slice(0, 10);
                 return visitDate >= startKey && visitDate <= endKey;
             });
+            const dealRows = (appData.teamCustomers || []).filter(row => {
+                const dealDate = getReportDealDate(row);
+                return dealDate >= startKey && dealDate <= endKey;
+            });
 
             document.getElementById('report-period-label').innerText = reportPeriodLabel(start, end);
-            document.getElementById('report-first-count').innerText = rows.filter(row => String(row.訪客類別 || '') === '初訪').length;
-            document.getElementById('report-return-count').innerText = rows.filter(row => ['回籠', '再訪'].includes(String(row.訪客類別 || ''))).length;
-            document.getElementById('report-deal-count').innerText = rows.filter(row => String(row.成交狀態 || '') === '正式成交').length;
+            document.getElementById('report-first-count').innerText = visitRows.filter(row => String(row.訪客類別 || '') === '初訪').length;
+            document.getElementById('report-return-count').innerText = visitRows.filter(row => ['回籠', '再訪'].includes(String(row.訪客類別 || ''))).length;
+            document.getElementById('report-deal-count').innerText = dealRows.length;
             document.getElementById('report-updated-at').innerText = `更新 ${new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}`;
 
-            renderReportChart('source', 'report-source-chart', 'report-source-empty', countReportDimension(rows, ['來源管道', '媒體來源']), 'doughnut');
-            renderReportChart('area', 'report-area-chart', 'report-area-empty', countReportDimension(rows, ['居住行政區', '居住區域']), 'bar');
-            renderReportChart('room', 'report-room-chart', 'report-room-empty', countReportDimension(rows, ['需求房型']), 'bar');
+            renderSalesStaffStats(visitRows, dealRows);
+            renderReportChart('source', 'report-source-chart', 'report-source-empty', countReportDimension(visitRows, ['來源管道', '媒體來源']), 'doughnut');
+            renderReportChart('area', 'report-area-chart', 'report-area-empty', countReportDimension(visitRows, ['居住行政區', '居住區域']), 'bar');
+            renderReportChart('room', 'report-room-chart', 'report-room-empty', countReportDimension(visitRows, ['需求房型']), 'bar');
         }
 
         function renderReportChart(key, canvasId, emptyId, counts, type) {
