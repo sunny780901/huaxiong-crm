@@ -1000,9 +1000,26 @@
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-gold-200 space-y-4">
+                    <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                                <h3 class="font-bold text-emerald-900">新同仁一次性邀請碼</h3>
+                                <p class="mt-1 text-xs text-emerald-800">同仁從 LINE 開啟 CRM 後輸入邀請碼，系統會自動綁定帳號並送交你核准。</p>
+                            </div>
+                            <div class="flex gap-2">
+                                <select id="invite-role" class="border border-emerald-200 rounded-lg px-3 py-2 text-sm bg-white">
+                                    <option value="銷售主任">銷售主任</option>
+                                    <option value="行政副理">行政副理</option>
+                                </select>
+                                <button type="button" onclick="createUserInvite()" class="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-bold">產生邀請碼</button>
+                            </div>
+                        </div>
+                        <div id="invite-result" class="hidden mt-3 rounded-xl bg-white border border-emerald-200 p-3"></div>
+                        <div id="invite-history" class="mt-3 space-y-2"></div>
+                    </div>
                     <div>
                         <h3 id="user-form-title" class="font-bold text-base text-gold-800">新增使用者</h3>
-                        <p class="mt-1 text-xs text-gray-500">LINE ID 必須與同仁登入 LINE 的帳號一致。</p>
+                        <p class="mt-1 text-xs text-gray-500">一般新同仁請使用上方邀請碼；以下保留給管理員手動維護既有帳號。</p>
                     </div>
                     <form id="user-management-form" onsubmit="handleUserSubmit(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <input type="hidden" name="id">
@@ -1197,11 +1214,11 @@
                         <i class="fas fa-lock text-2xl"></i>
                     </div>
                     <h3 class="font-bold text-gray-800 text-lg mb-2">同仁身分驗證</h3>
-                    <p class="text-sm text-gray-600 mb-4">請輸入華雄天地 CRM 存取密碼。系統仍會核對你的 LINE 帳號與使用者白名單。</p>
+                    <p class="text-sm text-gray-600 mb-4">既有同仁請輸入 CRM 存取密碼；新同仁請輸入專案經理提供的一次性邀請碼。</p>
                     <form onsubmit="unlockCRM(event)" class="space-y-3">
                         <input id="access-code-input" type="password" inputmode="numeric" autocomplete="current-password"
                             class="w-full border border-gray-300 rounded-xl px-4 py-3 text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-gold-400"
-                            placeholder="請輸入存取密碼" required autofocus>
+                            placeholder="存取密碼／一次性邀請碼" required autofocus>
                         <p id="access-code-error" class="${message ? '' : 'hidden'} text-sm text-red-600">${message}</p>
                         <button id="access-code-submit" type="submit" class="auth-submit">
                             驗證並進入 CRM
@@ -1237,6 +1254,21 @@
                 return;
             }
 
+            if (currentUser.lastErrorCode === 'USER_NOT_REGISTERED') {
+                const inviteResult = await apiPost('redeemInvite', { inviteCode: input.value }, null, true);
+                if (inviteResult && inviteResult.pending) {
+                    currentUser.accessCode = '';
+                    showPendingApproval(inviteResult.user && inviteResult.user.姓名);
+                    return;
+                }
+            }
+
+            if (currentUser.lastErrorCode === 'ACCOUNT_PENDING') {
+                currentUser.accessCode = '';
+                showPendingApproval(currentUser.name);
+                return;
+            }
+
             currentUser.accessCode = '';
             input.value = '';
             input.focus();
@@ -1244,6 +1276,15 @@
             error.classList.remove('hidden');
             button.disabled = false;
             button.innerText = '驗證並進入 CRM';
+        }
+
+        function showPendingApproval(name = '') {
+            document.getElementById('loading-screen').innerHTML = `
+                <div class="text-center p-6 bg-white border border-amber-200 rounded-2xl max-w-md mx-auto shadow-sm">
+                    <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center"><i class="fas fa-user-clock text-2xl"></i></div>
+                    <h3 class="font-bold text-gray-800 text-lg mb-2">申請已送出</h3>
+                    <p class="text-sm text-gray-600">${escapeHtml(name || '你的')} LINE 帳號已自動綁定。請等待專案經理核准，核准後重新開啟 CRM 即可登入。</p>
+                </div>`;
         }
 
         async function fetchAllData() {
@@ -1838,6 +1879,7 @@
             const container = document.getElementById('user-management-list');
             if (!container || !currentUser.permissions.manageUsers) return;
             const users = appData.users || [];
+            renderInviteHistory();
             document.getElementById('user-count').innerText = users.length;
             if (!users.length) {
                 container.innerHTML = '<p class="text-center text-gray-500 py-5 text-sm">目前沒有使用者資料</p>';
@@ -1850,22 +1892,57 @@
             };
             container.innerHTML = users.map(user => {
                 const isSelf = String(user.lineId || '') === String(currentUser.lineId || '');
+                const status = user.帳號狀態 || '啟用';
+                const statusStyle = status === '啟用' ? 'bg-emerald-100 text-emerald-800' : status === '待審核' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-700';
                 return `
                     <div class="rounded-xl border border-gray-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="font-bold text-gray-800">${escapeHtml(user.姓名 || '')}</span>
                                 <span class="text-xs px-2 py-1 rounded-full ${roleStyle[user.職稱] || 'bg-gray-100 text-gray-700'}">${escapeHtml(user.職稱 || '')}</span>
+                                <span class="text-xs px-2 py-1 rounded-full ${statusStyle}">${escapeHtml(status)}</span>
                                 ${isSelf ? '<span class="text-xs text-gold-700 font-bold">目前帳號</span>' : ''}
                             </div>
                             <p class="mt-1 text-xs text-gray-500 font-mono break-all">${escapeHtml(user.lineId || '')}</p>
                         </div>
                         <div class="flex gap-2">
+                            ${status === '待審核' ? `<button type="button" onclick="manageUserStatus('approveUser','${user.id}')" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold">核准</button>` : ''}
+                            ${status === '啟用' && !isSelf ? `<button type="button" onclick="manageUserStatus('disableUser','${user.id}')" class="px-3 py-2 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold">停用</button>` : ''}
+                            ${status === '停用' ? `<button type="button" onclick="manageUserStatus('approveUser','${user.id}')" class="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold">重新啟用</button>` : ''}
+                            ${status === '啟用' && !isSelf ? `<button type="button" onclick="manageUserStatus('revokeUserSession','${user.id}')" class="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">強制登出</button>` : ''}
                             <button type="button" onclick="editUser('${user.id}')" class="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100">編輯</button>
                             <button type="button" onclick="removeUser('${user.id}')" ${isSelf ? 'disabled' : ''} class="px-3 py-2 rounded-lg text-xs font-bold ${isSelf ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-50 text-red-700 hover:bg-red-100'}">刪除</button>
                         </div>
                     </div>`;
             }).join('');
+        }
+
+        async function createUserInvite() {
+            if (!currentUser.permissions.manageUsers) return;
+            const role = document.getElementById('invite-role').value;
+            const result = await apiPost('createInvite', { 職稱: role, 有效小時: 72 });
+            if (!result) return;
+            const box = document.getElementById('invite-result');
+            box.classList.remove('hidden');
+            box.innerHTML = `<p class="text-xs text-gray-500">請立即複製給新同仁（72 小時內、僅能使用一次）</p><div class="mt-2 flex items-center justify-between gap-3"><code class="text-xl font-bold tracking-widest text-emerald-800">${escapeHtml(result.inviteCode)}</code><button type="button" onclick="navigator.clipboard.writeText('${result.inviteCode}').then(()=>alert('邀請碼已複製'))" class="rounded-lg bg-emerald-100 text-emerald-800 px-3 py-2 text-xs font-bold">複製</button></div>`;
+            await fetchAllData();
+            switchView('users');
+        }
+
+        function renderInviteHistory() {
+            const box = document.getElementById('invite-history');
+            if (!box) return;
+            const invites = appData.invites || [];
+            box.innerHTML = invites.slice(0, 5).map(item => `<div class="flex justify-between gap-3 text-xs text-gray-600 bg-white/70 rounded-lg px-3 py-2"><span>${escapeHtml(item.職稱 || '')}｜${escapeHtml(item.狀態 || '')}${item.使用者姓名 ? '｜' + escapeHtml(item.使用者姓名) : ''}</span><span>${escapeHtml(item.有效期限 || '')}</span></div>`).join('');
+        }
+
+        async function manageUserStatus(action, id) {
+            const labels = { approveUser: '核准／啟用', disableUser: '停用', revokeUserSession: '強制登出' };
+            if (!confirm(`確定要${labels[action] || '操作'}此帳號嗎？`)) return;
+            const result = await apiPost(action, {}, id);
+            if (!result) return;
+            await fetchAllData();
+            switchView('users');
         }
 
         async function handleUserSubmit(event) {
