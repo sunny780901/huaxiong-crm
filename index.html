@@ -443,8 +443,8 @@
 
                 <div class="ops-shell p-5 rounded-2xl space-y-4">
                     <div>
-                        <p class="ops-kicker">近 7 天客戶資料</p>
-                        <p class="mt-1 text-xs text-gray-500">所有職級皆可查看、追蹤及更新進度</p>
+                        <p class="ops-kicker">全部客戶資料</p>
+                        <p class="mt-1 text-xs text-gray-500">可依姓名、電話、日期或接待人員快速查詢</p>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <input id="team-customer-search" oninput="renderRecentCustomers()" type="search" placeholder="搜尋姓名或電話" class="border border-gray-300 rounded-xl p-3 text-sm">
@@ -1750,18 +1750,14 @@
             if (!container) return;
             const search = String(document.getElementById('team-customer-search')?.value || '').trim().toLowerCase();
             const date = String(document.getElementById('team-customer-date')?.value || '');
-            const cutoff = new Date();
-            cutoff.setHours(0, 0, 0, 0);
-            cutoff.setDate(cutoff.getDate() - 6);
             const rows = (appData.teamCustomers || []).filter(row => {
-                const rowDate = new Date(String(row.訪客日期 || '') + 'T00:00:00');
-                const recent = date ? String(row.訪客日期 || '') === date : (!isNaN(rowDate) && rowDate >= cutoff);
+                const matchesDate = !date || String(row.訪客日期 || '').slice(0, 10) === date;
                 const matchesStaff = !activeTeamStaff || row.接待人員 === activeTeamStaff;
                 const haystack = `${row.姓名 || ''} ${row.電話 || ''}`.toLowerCase();
-                return recent && matchesStaff && (!search || haystack.includes(search));
+                return matchesDate && matchesStaff && (!search || haystack.includes(search));
             }).sort((a, b) => String(b.訪客日期 || '').localeCompare(String(a.訪客日期 || '')));
             if (!rows.length) {
-                container.innerHTML = '<p class="text-center text-gray-500 py-8 text-sm">目前範圍內沒有客戶資料</p>';
+                container.innerHTML = '<p class="text-center text-gray-500 py-8 text-sm">找不到符合條件的客戶資料</p>';
                 return;
             }
             container.innerHTML = rows.map(renderTeamCustomerCard).join('');
@@ -2532,4 +2528,3 @@
     </script>
 </body>
 </html>
-下週休假
