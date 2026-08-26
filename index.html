@@ -391,7 +391,7 @@
                             </div>
                         <span class="font-bold text-gray-800 text-sm block">排班管理</span>
                         </button>
-                        <button onclick="switchView('price-menu')" class="bg-white p-5 rounded-2xl shadow-xs border border-gold-200 hover:border-gold-500 hover:shadow-md transition text-center group">
+                        <button data-module-key="priceMenu" onclick="switchView('price-menu')" class="bg-white p-5 rounded-2xl shadow-xs border border-gold-200 hover:border-gold-500 hover:shadow-md transition text-center group">
                             <div class="w-12 h-12 mx-auto bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl mb-3 group-hover:bg-amber-600 group-hover:text-white transition">
                                 <i class="fas fa-book-open"></i>
                             </div>
@@ -960,7 +960,7 @@
                 </div>
             </section>
 
-            <!-- 9. 現場價目菜單（所有已登入使用者） -->
+            <!-- 9. 現場價目菜單（由專案經理控制功能權限） -->
             <section id="view-price-menu" class="space-y-5 view-section hidden">
                 <div class="flex items-center justify-between gap-3">
                     <button onclick="switchView('dashboard')" class="text-gold-700 font-medium text-sm flex items-center">
@@ -1086,6 +1086,8 @@
 
         const LIFF_ID = '2010462647-0gItbrTa';
         const AUTH_SESSION_KEY = 'huaxiong_crm_access_session_v1';
+        const AUTH_SESSION_COOKIE = 'huaxiong_crm_access_session';
+        const AUTH_SESSION_MAX_AGE = 30 * 24 * 60 * 60;
 
         let appData = {
             customers: [],
@@ -1126,14 +1128,38 @@
         const MODULE_LABELS = {
             teamOverview: '團隊客戶總覽', customerForm: '客戶資料登記', customerList: '我的客戶',
             appointments: '預約賞屋', tasks: '任務系統', reports: '銷售報表統計',
-            heatmaps: '營運熱力圖', maintenance: '維修通報', schedule: '排班管理'
+            heatmaps: '營運熱力圖', maintenance: '維修通報', schedule: '排班管理',
+            priceMenu: '現場價目菜單'
         };
 
         function roleDefaultPermissions(role) {
             const all = Object.fromEntries(Object.keys(MODULE_LABELS).map(key => [key, role === '專案經理']));
-            if (role === '行政副理') Object.assign(all, { teamOverview: true, customerForm: true, customerList: true, appointments: true, tasks: true, maintenance: true, schedule: true });
-            if (role === '銷售主任') Object.assign(all, { customerForm: true, customerList: true, appointments: true, tasks: true, maintenance: true, schedule: true });
+            if (role === '行政副理') Object.assign(all, { teamOverview: true, customerForm: true, customerList: true, appointments: true, tasks: true, maintenance: true, schedule: true, priceMenu: true });
+            if (role === '銷售主任') Object.assign(all, { customerForm: true, customerList: true, appointments: true, tasks: true, maintenance: true, schedule: true, priceMenu: true });
             return all;
+        }
+
+        function readAuthSession() {
+            const stored = localStorage.getItem(AUTH_SESSION_KEY);
+            if (stored) return stored;
+            const prefix = `${AUTH_SESSION_COOKIE}=`;
+            const cookie = document.cookie.split(';').map(value => value.trim()).find(value => value.startsWith(prefix));
+            return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : '';
+        }
+
+        function saveAuthSession(token) {
+            if (!token) return;
+            localStorage.setItem(AUTH_SESSION_KEY, token);
+            document.cookie = `${AUTH_SESSION_COOKIE}=${encodeURIComponent(token)}; Max-Age=${AUTH_SESSION_MAX_AGE}; Path=/; SameSite=Lax; Secure`;
+        }
+
+        function clearAuthSession() {
+            localStorage.removeItem(AUTH_SESSION_KEY);
+            document.cookie = `${AUTH_SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax; Secure`;
+        }
+
+        function isInvalidAuthSession(code) {
+            return ['INVALID_ACCESS_TOKEN', 'ACCESS_TOKEN_EXPIRED', 'ACCESS_TOKEN_REVOKED', 'ACCOUNT_DISABLED', 'USER_NOT_REGISTERED'].includes(code);
         }
 
         function renderUserPermissionControls(values) {
@@ -1202,7 +1228,7 @@
             }
 
             // 優先使用後端簽發的 30 天憑證；失效後才再次要求密碼。
-            currentUser.accessToken = localStorage.getItem(AUTH_SESSION_KEY) || '';
+            currentUser.accessToken = readAuthSession();
             if (currentUser.accessToken) {
                 const data = await apiPost('getAll', {}, null, true);
                 if (data) {
@@ -1210,9 +1236,13 @@
                     initAppUI();
                     return;
                 }
-                localStorage.removeItem(AUTH_SESSION_KEY);
-                currentUser.accessToken = '';
-                showAccessCodePrompt('登入已失效或超過 30 天，請重新輸入密碼。');
+                if (isInvalidAuthSession(currentUser.lastErrorCode)) {
+                    clearAuthSession();
+                    currentUser.accessToken = '';
+                    showAccessCodePrompt('登入已失效或超過 30 天，請重新輸入密碼。');
+                } else {
+                    showAccessCodePrompt('目前連線異常，登入憑證仍已保留；請重新開啟或稍後再試。');
+                }
                 return;
             }
             showAccessCodePrompt();
@@ -1240,7 +1270,7 @@
 
         function logoutCRM() {
             if (!confirm('確定要登出華雄天地 CRM 嗎？下次需要重新輸入密碼。')) return;
-            localStorage.removeItem(AUTH_SESSION_KEY);
+            clearAuthSession();
             currentUser.accessToken = '';
             currentUser.accessCode = '';
             if (liff.isLoggedIn()) liff.logout();
@@ -1385,7 +1415,7 @@
         }
 
         function switchView(viewId) {
-            const viewPermissionKey = { 'team-overview': 'teamOverview', 'customer-form': 'customerForm', 'customer-list': 'customerList', appointments: 'appointments', tasks: 'tasks', reports: 'reports', maintenance: 'maintenance', schedule: 'schedule' }[viewId];
+            const viewPermissionKey = { 'team-overview': 'teamOverview', 'customer-form': 'customerForm', 'customer-list': 'customerList', appointments: 'appointments', tasks: 'tasks', reports: 'reports', maintenance: 'maintenance', schedule: 'schedule', 'price-menu': 'priceMenu' }[viewId];
             if (viewPermissionKey && !currentUser.permissions.modules?.[viewPermissionKey]) {
                 alert('專案經理尚未開啟你的此項功能權限。');
                 return;
@@ -1535,7 +1565,7 @@
                     currentUser.lastErrorMessage = '';
                     if (result.meta && result.meta.accessToken) {
                         currentUser.accessToken = result.meta.accessToken;
-                        localStorage.setItem(AUTH_SESSION_KEY, currentUser.accessToken);
+                        saveAuthSession(currentUser.accessToken);
                     }
                     return result.data;
                 } else {
@@ -2500,6 +2530,6 @@
             });
         }
     </script>
-
-
-<script src="https://static.line-scdn.net/liff/edge/2/non-ios-extensions_2_22_0.js" type="text/javascript"></script></body><div id="codex-browser-sidebar-comments-root" style="position: fixed; inset: 0px; pointer-events: none; z-index: 2147483647;"></div></html>
+</body>
+</html>
+下週休假
