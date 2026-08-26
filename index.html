@@ -391,6 +391,12 @@
                             </div>
                         <span class="font-bold text-gray-800 text-sm block">排班管理</span>
                         </button>
+                        <button onclick="switchView('price-menu')" class="bg-white p-5 rounded-2xl shadow-xs border border-gold-200 hover:border-gold-500 hover:shadow-md transition text-center group">
+                            <div class="w-12 h-12 mx-auto bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl mb-3 group-hover:bg-amber-600 group-hover:text-white transition">
+                                <i class="fas fa-book-open"></i>
+                            </div>
+                            <span class="font-bold text-gray-800 text-sm block">現場價目菜單</span>
+                        </button>
                         <button id="users-module" onclick="switchView('users')" class="hidden bg-white p-5 rounded-2xl shadow-xs border border-gold-200 hover:border-gold-500 hover:shadow-md transition text-center group">
                             <div class="w-12 h-12 mx-auto bg-indigo-100 text-indigo-700 rounded-xl flex items-center justify-center text-xl mb-3 group-hover:bg-indigo-600 group-hover:text-white transition">
                                 <i class="fas fa-user-shield"></i>
@@ -954,7 +960,46 @@
                 </div>
             </section>
 
-            <!-- 9. 使用者管理（僅專案經理） -->
+            <!-- 9. 現場價目菜單（所有已登入使用者） -->
+            <section id="view-price-menu" class="space-y-5 view-section hidden">
+                <div class="flex items-center justify-between gap-3">
+                    <button onclick="switchView('dashboard')" class="text-gold-700 font-medium text-sm flex items-center">
+                        <i class="fas fa-arrow-left mr-1"></i> 返回首頁
+                    </button>
+                    <div class="text-right">
+                        <h2 class="text-xl font-bold text-gray-800">現場價目菜單</h2>
+                        <p id="price-menu-updated" class="text-xs text-gray-500 mt-1"></p>
+                    </div>
+                </div>
+
+                <div class="rounded-2xl p-5 text-white shadow-lg" style="background:linear-gradient(135deg,#10233f,#8a632b)">
+                    <p class="text-xs font-bold tracking-widest text-amber-200">HUAXIONG PRICE MENU</p>
+                    <h3 class="text-2xl font-black mt-2">房屋與車位公開表價</h3>
+                    <p class="text-sm text-white/75 mt-2">供現場銷售介紹使用。成交價格與銷售狀態，請依公司最新公告確認。</p>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gold-100 sticky top-20 z-20">
+                    <div class="grid grid-cols-2 gap-2 mb-3">
+                        <button type="button" data-price-tab="houses" onclick="setPriceMenuTab('houses')" class="price-menu-tab rounded-xl py-3 text-sm font-bold bg-gray-100 text-gray-600">房屋價格</button>
+                        <button type="button" data-price-tab="parking" onclick="setPriceMenuTab('parking')" class="price-menu-tab rounded-xl py-3 text-sm font-bold bg-gray-100 text-gray-600">車位價格</button>
+                    </div>
+                    <label for="price-menu-search" class="sr-only">搜尋戶別或樓層</label>
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gold-600"></i>
+                        <input id="price-menu-search" type="search" inputmode="search" oninput="renderPriceMenu()" placeholder="搜尋戶別樓層，例如 A1-3F、29F"
+                            class="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 text-sm font-medium text-gray-800">
+                    </div>
+                    <div id="price-menu-unit-filters" class="flex gap-2 overflow-x-auto pt-3 pb-1"></div>
+                </div>
+
+                <div class="flex items-center justify-between px-1">
+                    <p id="price-menu-summary" class="text-sm font-bold text-gray-700"></p>
+                    <button type="button" onclick="clearPriceMenuFilters()" class="text-xs font-bold text-gold-700">清除篩選</button>
+                </div>
+                <div id="price-menu-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+            </section>
+
+            <!-- 10. 使用者管理（僅專案經理） -->
             <section id="view-users" class="space-y-6 view-section hidden">
                 <div class="flex items-center justify-between">
                     <button onclick="switchView('dashboard')" class="text-gold-700 font-medium text-sm flex items-center">
@@ -1050,6 +1095,7 @@
             maintenance: [],
             reports: [],
             heatmaps: null,
+            priceMenu: { houses: [], parking: [], updatedAt: '' },
             schedules: [],
             followUps: [],
             users: []
@@ -1073,6 +1119,8 @@
         let activeReportPeriod = 'day';
         let heatmapRequestKey = '';
         let heatmapRequestSerial = 0;
+        let activePriceMenuTab = 'houses';
+        let activePriceUnit = 'all';
         const reportCharts = { source: null, area: null, room: null };
         const LEAVE_TYPES = ['休假', '病假', '事假', '特休'];
         const MODULE_LABELS = {
@@ -1298,6 +1346,7 @@
             if (!Array.isArray(appData.teamCustomers)) appData.teamCustomers = appData.customers || [];
             if (!Array.isArray(appData.followUps)) appData.followUps = [];
             if (!appData.heatmaps || typeof appData.heatmaps !== 'object') appData.heatmaps = null;
+            if (!appData.priceMenu || typeof appData.priceMenu !== 'object') appData.priceMenu = { houses: [], parking: [], updatedAt: '' };
             if (data && data.session) {
                 currentUser.name = data.session.name || currentUser.name;
                 currentUser.lineId = data.session.lineId || currentUser.lineId;
@@ -1328,6 +1377,7 @@
             renderMaintenanceList();
             renderScheduleStaffOptions();
             renderScheduleCalendar();
+            renderPriceMenu();
             renderSalesReports();
             renderUserManagement();
             if (currentUser.permissions.manageUsers) renderUserPermissionControls(roleDefaultPermissions('專案經理'));
@@ -1351,6 +1401,7 @@
             document.querySelectorAll('.view-section').forEach(sec => sec.classList.add('hidden'));
             document.getElementById('view-' + viewId).classList.remove('hidden');
             if (viewId === 'reports') requestAnimationFrame(renderSalesReports);
+            if (viewId === 'price-menu') renderPriceMenu();
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
@@ -1359,6 +1410,88 @@
             document.getElementById('reports-module')?.classList.toggle('hidden', !currentUser.permissions.modules?.reports);
             document.getElementById('heatmap-module')?.classList.toggle('hidden', !currentUser.permissions.viewHeatmaps);
             document.getElementById('users-module')?.classList.toggle('hidden', !currentUser.permissions.manageUsers);
+        }
+
+        function setPriceMenuTab(tab) {
+            activePriceMenuTab = tab === 'parking' ? 'parking' : 'houses';
+            activePriceUnit = 'all';
+            const search = document.getElementById('price-menu-search');
+            if (search) {
+                search.value = '';
+                search.placeholder = activePriceMenuTab === 'houses' ? '搜尋戶別樓層，例如 A1-3F、29F' : '搜尋車位區或車位類型';
+            }
+            renderPriceMenu();
+        }
+
+        function setPriceMenuUnit(unit) {
+            activePriceUnit = unit || 'all';
+            renderPriceMenu();
+        }
+
+        function clearPriceMenuFilters() {
+            activePriceUnit = 'all';
+            const search = document.getElementById('price-menu-search');
+            if (search) search.value = '';
+            renderPriceMenu();
+        }
+
+        function normalizePriceMenuSearch(value) {
+            return String(value || '').trim().toUpperCase().replace(/\s+/g, '').replace(/樓/g, 'F');
+        }
+
+        function renderPriceMenu() {
+            const container = document.getElementById('price-menu-list');
+            if (!container) return;
+            const menu = appData.priceMenu || { houses: [], parking: [], updatedAt: '' };
+            const houses = Array.isArray(menu.houses) ? menu.houses : [];
+            const parking = Array.isArray(menu.parking) ? menu.parking : [];
+            const rows = activePriceMenuTab === 'parking' ? parking : houses;
+            const search = normalizePriceMenuSearch(document.getElementById('price-menu-search')?.value);
+            const units = [...new Set(rows.map(row => row.unit).filter(Boolean))];
+            const filtered = rows.filter(row => {
+                const matchesUnit = activePriceUnit === 'all' || row.unit === activePriceUnit;
+                const label = activePriceMenuTab === 'houses'
+                    ? `${row.unit}-${row.floor}F|${row.floor}F|${row.area}`
+                    : `${row.unit}|${row.type}|${row.area}|${row.size}`;
+                return matchesUnit && (!search || normalizePriceMenuSearch(label).includes(search));
+            });
+
+            document.querySelectorAll('.price-menu-tab').forEach(button => {
+                const active = button.dataset.priceTab === activePriceMenuTab;
+                button.classList.toggle('bg-gold-600', active);
+                button.classList.toggle('text-white', active);
+                button.classList.toggle('bg-gray-100', !active);
+                button.classList.toggle('text-gray-600', !active);
+            });
+            const filters = document.getElementById('price-menu-unit-filters');
+            if (filters) {
+                filters.innerHTML = ['all', ...units].map(unit => `<button type="button" onclick="setPriceMenuUnit('${escapeHtml(unit)}')" class="shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${activePriceUnit === unit ? 'border-gold-600 bg-gold-600 text-white' : 'border-gray-200 bg-white text-gray-600'}">${unit === 'all' ? '全部' : escapeHtml(unit)}</button>`).join('');
+            }
+            document.getElementById('price-menu-updated').textContent = menu.updatedAt ? `資料版本：${menu.updatedAt}` : '';
+            document.getElementById('price-menu-summary').textContent = activePriceMenuTab === 'houses' ? `房屋表價｜${filtered.length} 戶` : `車位表價｜${filtered.length} 種`;
+
+            if (!filtered.length) {
+                container.innerHTML = '<div class="sm:col-span-2 rounded-2xl border border-dashed border-gold-200 bg-white px-4 py-10 text-center text-sm text-gray-500">找不到符合的價目，請調整搜尋條件。</div>';
+                return;
+            }
+            container.innerHTML = filtered.map(row => activePriceMenuTab === 'houses' ? `
+                <article class="overflow-hidden rounded-2xl border border-gold-100 bg-white shadow-sm">
+                    <div class="flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-700 px-4 py-3 text-white">
+                        <div><p class="text-xs text-white/60">戶別樓層</p><h3 class="text-lg font-black">${escapeHtml(row.unit)}-${escapeHtml(row.floor)}F</h3></div>
+                        <span class="rounded-full bg-white/10 px-3 py-1 text-xs font-bold">${escapeHtml(row.area)} 坪</span>
+                    </div>
+                    <div class="flex items-end justify-between gap-3 p-4">
+                        <div><p class="text-xs text-gray-500">房屋公開表價</p><p class="mt-1 text-3xl font-black text-gold-700">${Number(row.price).toLocaleString('zh-TW')}<span class="ml-1 text-sm">萬</span></p></div>
+                        <i class="fas fa-building text-3xl text-gold-200"></i>
+                    </div>
+                </article>` : `
+                <article class="rounded-2xl border border-amber-200 bg-gradient-to-br from-white to-amber-50 p-4 shadow-sm">
+                    <div class="flex items-start justify-between gap-3">
+                        <div><p class="text-xs font-bold text-amber-700">${escapeHtml(row.unit)} 車位區</p><h3 class="mt-1 text-lg font-black text-gray-800">${escapeHtml(row.type)}</h3><p class="mt-1 text-xs text-gray-500">${escapeHtml(row.area)} 坪｜${escapeHtml(row.size)}</p></div>
+                        <i class="fas fa-square-parking text-3xl text-amber-500"></i>
+                    </div>
+                    <div class="mt-4 border-t border-amber-200 pt-3"><p class="text-xs text-gray-500">車位公開表價</p><p class="mt-1 text-3xl font-black text-amber-700">${Number(row.price).toLocaleString('zh-TW')}<span class="ml-1 text-sm">萬</span></p></div>
+                </article>`).join('');
         }
 
         function renderCustomerStaffOptions() {
