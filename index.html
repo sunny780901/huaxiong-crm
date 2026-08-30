@@ -981,6 +981,7 @@
                         <h3 id="schedule-month-label" class="font-bold text-lg text-gray-800"></h3>
                         <button type="button" onclick="changeScheduleMonth(1)" class="calendar-nav rounded-xl px-3 py-2 text-sm font-bold">下月<i class="fas fa-chevron-right ml-1"></i></button>
                     </div>
+                    <div id="schedule-staff-legend" class="flex flex-wrap gap-3 mb-4" aria-label="排休人員顏色對照"></div>
                     <div class="calendar-scroll">
                         <div id="schedule-calendar" class="leave-calendar"></div>
                     </div>
@@ -2316,6 +2317,9 @@
             const container = document.getElementById('schedule-calendar');
             const label = document.getElementById('schedule-month-label');
             if (!container || !label) return;
+            const staffColors = buildScheduleStaffColors();
+            const legend = document.getElementById('schedule-staff-legend');
+            if (legend) legend.innerHTML = Object.entries(staffColors).map(([name, color]) => `<span class="leave-chip" style="color:${color.text};background:${color.background}">${escapeHtml(name)}</span>`).join('');
 
             const year = scheduleCalendarMonth.getFullYear();
             const month = scheduleCalendarMonth.getMonth();
@@ -2334,7 +2338,7 @@
                 const weekday = new Date(year, month, day).getDay();
                 const rows = leaveRows.filter(row => String(row.日期) === dateKey);
                 const chips = rows.map(row => `
-                    <div class="leave-chip ${leaveClass(row.狀態)}">
+                    <div class="leave-chip" style="color:${staffColors[String(row.人員 || '').trim()].text};background:${staffColors[String(row.人員 || '').trim()].background}">
                         <span>${escapeHtml(row.人員)}・${escapeHtml(row.狀態)}</span>
                         ${canEditOwnedRecord(row) ? `<button type="button" class="leave-remove" aria-label="取消${escapeHtml(row.人員)}休假" onclick="deleteScheduleEntry('${row.id}')">×</button>` : ''}
                     </div>`).join('');
@@ -2357,8 +2361,25 @@
             }
         }
 
-        function leaveClass(type) {
-            return { '休假': 'leave-rest', '病假': 'leave-sick', '事假': 'leave-personal', '特休': 'leave-annual' }[type] || 'leave-rest';
+        function buildScheduleStaffColors() {
+            // 固定人員配色；同一人不會因月份或假別改變顏色。
+            const fixed = { '盧易方': 215, '宋嬌琦': 330, '林芝妍': 155, '呂冠美': 275 };
+            const names = [...new Set([
+                ...(appData.users || []).map(row => String(row.姓名 || '').trim()),
+                ...(appData.schedules || []).map(row => String(row.人員 || '').trim())
+            ])].sort();
+            const colors = Object.create(null);
+            const used = new Set(Object.values(fixed));
+            names.forEach(name => {
+                let hue = Object.prototype.hasOwnProperty.call(fixed, name) ? fixed[name] : undefined;
+                if (hue === undefined) {
+                    hue = Array.from(name).reduce((hash, char) => (hash * 31 + char.codePointAt(0)) % 360, 35);
+                    while (used.has(hue) && used.size < 360) hue = (hue + 137) % 360;
+                    used.add(hue);
+                }
+                colors[name] = { text: `hsl(${hue}, 70%, 30%)`, background: `hsl(${hue}, 80%, 94%)` };
+            });
+            return colors;
         }
 
         function formatDateKey(date) {
