@@ -413,7 +413,7 @@
                             <div class="w-12 h-12 mx-auto bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center text-xl mb-3 group-hover:bg-amber-600 group-hover:text-white transition">
                                 <i class="fas fa-book-open"></i>
                             </div>
-                            <span class="font-bold text-gray-800 text-sm block">現場價目菜單</span>
+                            <span class="font-bold text-gray-800 text-sm block">現場價目表</span>
                         </button>
                         <button id="users-module" onclick="switchView('users')" class="hidden bg-white p-5 rounded-2xl shadow-xs border border-gold-200 hover:border-gold-500 hover:shadow-md transition text-center group">
                             <div class="w-12 h-12 mx-auto bg-indigo-100 text-indigo-700 rounded-xl flex items-center justify-center text-xl mb-3 group-hover:bg-indigo-600 group-hover:text-white transition">
@@ -989,30 +989,33 @@
                 </div>
             </section>
 
-            <!-- 9. 現場價目菜單（由專案經理控制功能權限） -->
+            <!-- 9. 現場價目表（由專案經理控制功能權限） -->
             <section id="view-price-menu" class="space-y-5 view-section hidden">
                 <div class="flex items-center justify-between gap-3">
                     <button onclick="switchView('dashboard')" class="text-gold-700 font-medium text-sm flex items-center">
                         <i class="fas fa-arrow-left mr-1"></i> 返回首頁
                     </button>
                     <div class="text-right">
-                        <h2 class="text-xl font-bold text-gray-800">現場價目菜單</h2>
+                        <h2 class="text-xl font-bold text-gray-800">現場價目表</h2>
                         <p id="price-menu-updated" class="text-xs text-gray-500 mt-1"></p>
                     </div>
                 </div>
 
                 <div class="rounded-2xl p-5 text-white shadow-lg" style="background:linear-gradient(135deg,#10233f,#8a632b)">
-                    <p class="text-xs font-bold tracking-widest text-amber-200">HUAXIONG PRICE MENU</p>
-                    <h3 class="text-2xl font-black mt-2">房屋與車位公開表價</h3>
+                    <p class="text-xs font-bold tracking-widest text-amber-200">HUAXIONG PRICE LIST</p>
+                    <h3 class="text-2xl font-black mt-2">房屋、實品屋、COPY與選配價格</h3>
                     <p class="text-sm text-white/75 mt-2">供現場銷售介紹使用。成交價格與銷售狀態，請依公司最新公告確認。</p>
                 </div>
 
                 <div class="bg-white p-4 rounded-2xl shadow-sm border border-gold-100 sticky top-20 z-20">
-                    <div class="grid grid-cols-2 gap-2 mb-3">
-                        <button type="button" data-price-tab="houses" onclick="setPriceMenuTab('houses')" class="price-menu-tab rounded-xl py-3 text-sm font-bold bg-gray-100 text-gray-600">房屋價格</button>
+                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+                        <button type="button" data-price-tab="houses" onclick="setPriceMenuTab('houses')" class="price-menu-tab rounded-xl py-3 text-sm font-bold bg-gray-100 text-gray-600">房屋表價</button>
+                        <button type="button" data-price-tab="showcase" onclick="setPriceMenuTab('showcase')" class="price-menu-tab rounded-xl py-3 text-sm font-bold bg-gray-100 text-gray-600">實品屋價格</button>
+                        <button type="button" data-price-tab="copy" onclick="setPriceMenuTab('copy')" class="price-menu-tab rounded-xl py-3 text-sm font-bold bg-gray-100 text-gray-600">COPY價格</button>
+                        <button type="button" data-price-tab="options" onclick="setPriceMenuTab('options')" class="price-menu-tab rounded-xl py-3 text-sm font-bold bg-gray-100 text-gray-600">選配產品價格</button>
                         <button type="button" data-price-tab="parking" onclick="setPriceMenuTab('parking')" class="price-menu-tab rounded-xl py-3 text-sm font-bold bg-gray-100 text-gray-600">車位價格</button>
                     </div>
-                    <label for="price-menu-search" class="sr-only">搜尋戶別或樓層</label>
+                    <label for="price-menu-search" class="sr-only">搜尋戶別、樓層或產品</label>
                     <div class="relative">
                         <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gold-600"></i>
                         <input id="price-menu-search" type="search" inputmode="search" oninput="renderPriceMenu()" placeholder="搜尋戶別樓層，例如 A1-3F、29F"
@@ -1126,7 +1129,7 @@
             maintenance: [],
             reports: [],
             heatmaps: null,
-            priceMenu: { houses: [], parking: [], updatedAt: '' },
+            priceMenu: { houses: [], showcase: [], copy: [], options: [], parking: [], updatedAt: '' },
             schedules: [],
             followUps: [],
             users: []
@@ -1153,6 +1156,24 @@
         let heatmapRequestSerial = 0;
         let activePriceMenuTab = 'houses';
         let activePriceUnit = 'all';
+        const PUBLIC_PRICE_EXTRAS = Object.freeze({
+            showcase: Object.freeze([
+                { unit: 'A3', floor: 18, area: '-', price: 150 }, { unit: 'A5', floor: 18, area: '-', price: 210 },
+                { unit: 'B6', floor: 15, area: '-', price: 128 }, { unit: 'B1', floor: 4, area: '-', price: 165 },
+                { unit: 'B7', floor: 4, area: '-', price: 160 }, { unit: 'B3', floor: 4, area: '-', price: 52 }
+            ]),
+            copy: Object.freeze([
+                { unit: 'A3', floor: 18, area: '-', price: 130 }, { unit: 'A5', floor: 18, area: '-', price: 180 },
+                { unit: 'B6', floor: 15, area: '-', price: 115 }, { unit: 'B1', floor: 4, area: '-', price: 145 },
+                { unit: 'B7', floor: 4, area: '-', price: 140 }
+            ]),
+            options: Object.freeze([
+                { item: '隔間', price: 23, note: '內含：木作隔間（矽酸鈣板）、天花板、嵌燈。' },
+                { item: '傢俱', price: 17, note: '內含：鞋櫃、地毯、沙發、茶几、電視櫃、雙人床架*2、雙人獨立筒床墊*2、衣櫃*2、床頭櫃、化妝桌組、書桌、書桌椅、窗簾。' },
+                { item: '兩房冷氣', price: 12, note: '內含：日立變頻冷氣全戶（客廳、主臥、次臥）。' },
+                { item: '家電', price: 6, note: '內含：LG-13公斤滾筒洗衣機（蒸洗脫烘）、LG-525公升智慧變頻雙門冰箱。' }
+            ])
+        });
         const reportCharts = { source: null, area: null, room: null };
         const LEAVE_TYPES = ['休假', '病假', '事假', '特休'];
         const MODULE_LABELS = {
@@ -1406,7 +1427,11 @@
             if (!Array.isArray(appData.teamCustomers)) appData.teamCustomers = appData.customers || [];
             if (!Array.isArray(appData.followUps)) appData.followUps = [];
             if (!appData.heatmaps || typeof appData.heatmaps !== 'object') appData.heatmaps = null;
-            if (!appData.priceMenu || typeof appData.priceMenu !== 'object') appData.priceMenu = { houses: [], parking: [], updatedAt: '' };
+            if (!appData.priceMenu || typeof appData.priceMenu !== 'object') appData.priceMenu = { houses: [], showcase: [], copy: [], options: [], parking: [], updatedAt: '' };
+            ['houses', 'showcase', 'copy', 'options', 'parking'].forEach(key => { if (!Array.isArray(appData.priceMenu[key])) appData.priceMenu[key] = []; });
+            ['showcase', 'copy', 'options'].forEach(key => {
+                if (!appData.priceMenu[key].length) appData.priceMenu[key] = PUBLIC_PRICE_EXTRAS[key].map(row => ({ ...row }));
+            });
             if (data && data.session) {
                 currentUser.name = data.session.name || currentUser.name;
                 currentUser.lineId = data.session.lineId || currentUser.lineId;
@@ -1473,12 +1498,12 @@
         }
 
         function setPriceMenuTab(tab) {
-            activePriceMenuTab = tab === 'parking' ? 'parking' : 'houses';
+            activePriceMenuTab = ['houses', 'showcase', 'copy', 'options', 'parking'].includes(tab) ? tab : 'houses';
             activePriceUnit = 'all';
             const search = document.getElementById('price-menu-search');
             if (search) {
                 search.value = '';
-                search.placeholder = activePriceMenuTab === 'houses' ? '搜尋戶別樓層，例如 A1-3F、29F' : '搜尋車位區或車位類型';
+                search.placeholder = ['houses', 'showcase', 'copy'].includes(activePriceMenuTab) ? '搜尋戶別樓層，例如 A1-3F、29F' : activePriceMenuTab === 'options' ? '搜尋選配產品' : '搜尋車位區或車位類型';
             }
             renderPriceMenu();
         }
@@ -1502,17 +1527,20 @@
         function renderPriceMenu() {
             const container = document.getElementById('price-menu-list');
             if (!container) return;
-            const menu = appData.priceMenu || { houses: [], parking: [], updatedAt: '' };
+            const menu = appData.priceMenu || { houses: [], showcase: [], copy: [], options: [], parking: [], updatedAt: '' };
             const houses = Array.isArray(menu.houses) ? menu.houses : [];
+            const showcase = Array.isArray(menu.showcase) ? menu.showcase : [];
+            const copy = Array.isArray(menu.copy) ? menu.copy : [];
+            const options = Array.isArray(menu.options) ? menu.options : [];
             const parking = Array.isArray(menu.parking) ? menu.parking : [];
-            const rows = activePriceMenuTab === 'parking' ? parking : houses;
+            const rows = activePriceMenuTab === 'parking' ? parking : activePriceMenuTab === 'showcase' ? showcase : activePriceMenuTab === 'copy' ? copy : activePriceMenuTab === 'options' ? options : houses;
             const search = normalizePriceMenuSearch(document.getElementById('price-menu-search')?.value);
             const units = [...new Set(rows.map(row => row.unit).filter(Boolean))];
             const filtered = rows.filter(row => {
                 const matchesUnit = activePriceUnit === 'all' || row.unit === activePriceUnit;
-                const label = activePriceMenuTab === 'houses'
+                const label = ['houses', 'showcase', 'copy'].includes(activePriceMenuTab)
                     ? `${row.unit}-${row.floor}F|${row.floor}F|${row.area}`
-                    : `${row.unit}|${row.type}|${row.area}|${row.size}`;
+                    : activePriceMenuTab === 'options' ? `${row.item}|${row.price}|${row.note}` : `${row.unit}|${row.type}|${row.area}|${row.size}`;
                 return matchesUnit && (!search || normalizePriceMenuSearch(label).includes(search));
             });
 
@@ -1528,22 +1556,27 @@
                 filters.innerHTML = ['all', ...units].map(unit => `<button type="button" onclick="setPriceMenuUnit('${escapeHtml(unit)}')" class="shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${activePriceUnit === unit ? 'border-gold-600 bg-gold-600 text-white' : 'border-gray-200 bg-white text-gray-600'}">${unit === 'all' ? '全部' : escapeHtml(unit)}</button>`).join('');
             }
             document.getElementById('price-menu-updated').textContent = menu.updatedAt ? `資料版本：${menu.updatedAt}` : '';
-            document.getElementById('price-menu-summary').textContent = activePriceMenuTab === 'houses' ? `房屋表價｜${filtered.length} 戶` : `車位表價｜${filtered.length} 種`;
+            const summaryLabel = { houses: '房屋表價', showcase: '實品屋價格', copy: 'COPY價格', options: '選配產品價格', parking: '車位表價' }[activePriceMenuTab];
+            document.getElementById('price-menu-summary').textContent = `${summaryLabel}｜${filtered.length}${activePriceMenuTab === 'options' ? ' 項' : activePriceMenuTab === 'parking' ? ' 種' : ' 戶'}`;
 
             if (!filtered.length) {
                 container.innerHTML = '<div class="sm:col-span-2 rounded-2xl border border-dashed border-gold-200 bg-white px-4 py-10 text-center text-sm text-gray-500">找不到符合的價目，請調整搜尋條件。</div>';
                 return;
             }
-            container.innerHTML = filtered.map(row => activePriceMenuTab === 'houses' ? `
+            container.innerHTML = filtered.map(row => ['houses', 'showcase', 'copy'].includes(activePriceMenuTab) ? `
                 <article class="overflow-hidden rounded-2xl border border-gold-100 bg-white shadow-sm">
                     <div class="flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-700 px-4 py-3 text-white">
                         <div><p class="text-xs text-white/60">戶別樓層</p><h3 class="text-lg font-black">${escapeHtml(row.unit)}-${escapeHtml(row.floor)}F</h3></div>
-                        <span class="rounded-full bg-white/10 px-3 py-1 text-xs font-bold">${escapeHtml(row.area)} 坪</span>
+                        <span class="rounded-full bg-white/10 px-3 py-1 text-xs font-bold">${row.area && row.area !== '-' ? `${escapeHtml(row.area)} 坪` : '參考價'}</span>
                     </div>
                     <div class="flex items-end justify-between gap-3 p-4">
-                        <div><p class="text-xs text-gray-500">房屋公開表價</p><p class="mt-1 text-3xl font-black text-gold-700">${Number(row.price).toLocaleString('zh-TW')}<span class="ml-1 text-sm">萬</span></p></div>
+                        <div><p class="text-xs text-gray-500">${activePriceMenuTab === 'showcase' ? '實品屋價格' : activePriceMenuTab === 'copy' ? 'COPY價格' : '房屋公開表價'}</p><p class="mt-1 text-3xl font-black text-gold-700">${Number(row.price).toLocaleString('zh-TW')}<span class="ml-1 text-sm">萬</span></p></div>
                         <i class="fas fa-building text-3xl text-gold-200"></i>
                     </div>
+                </article>` : activePriceMenuTab === 'options' ? `
+                <article class="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-sm">
+                    <div class="flex items-center justify-between bg-gradient-to-r from-emerald-800 to-teal-700 px-4 py-3 text-white"><h3 class="text-lg font-black">${escapeHtml(row.item)}</h3><i class="fas fa-screwdriver-wrench text-xl text-emerald-200"></i></div>
+                    <div class="p-4"><p class="text-3xl font-black text-emerald-700">${escapeHtml(row.price)}<span class="ml-1 text-sm">萬元</span></p>${row.note ? `<p class="mt-3 text-xs leading-6 text-gray-600">${escapeHtml(row.note)}</p>` : ''}</div>
                 </article>` : `
                 <article class="rounded-2xl border border-amber-200 bg-gradient-to-br from-white to-amber-50 p-4 shadow-sm">
                     <div class="flex items-start justify-between gap-3">
