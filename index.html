@@ -1737,18 +1737,28 @@
         function renderStaffReceptionStats(monthRows) {
             const container = document.getElementById('staff-reception-stats');
             if (!container) return;
-            const names = [...new Set([...(appData.users || []).map(user => user.姓名), ...monthRows.map(row => row.接待人員)].filter(Boolean))];
+            // 統計顯示使用統一姓名，但不改寫客戶資料中的原始接待人員文字。
+            const names = [...new Set([...(appData.users || []).map(user => normalizeReceptionStaffName(user.姓名)), ...monthRows.map(row => normalizeReceptionStaffName(row.接待人員))].filter(Boolean))];
             if (!names.length) {
                 container.innerHTML = '<p class="text-sm text-gray-500 py-3">本月尚無接待資料</p>';
                 return;
             }
             container.innerHTML = names.map(name => {
-                const rows = monthRows.filter(row => row.接待人員 === name);
+                const rows = monthRows.filter(row => normalizeReceptionStaffName(row.接待人員) === name);
                 return `<div class="staff-stat-card">
                     <div><p class="font-bold text-gray-800">${escapeHtml(name)}</p><p class="text-xs text-gray-500 mt-2">初訪 ${rows.filter(r => r.訪客類別 === '初訪').length}　回籠 ${rows.filter(r => r.訪客類別 === '回籠').length}</p></div>
                     <strong class="text-xl text-gray-800">${rows.length} 組</strong>
                 </div>`;
             }).join('');
+        }
+
+        function normalizeReceptionStaffName(value) {
+            const name = String(value ?? '').trim();
+            const compact = name.replace(/\s+/g, '');
+            if (['芝妍Yan', '芝姸Yan', '芝妍yan', '芝姸yan'].includes(compact)) return '林芝妍';
+            // 部分舊資料使用拉丁／西里爾字母混排的 Meel 顯示名稱，統一歸入呂冠美。
+            if (['мєєι', 'мєєl', 'Mєєι', 'Mєєl', 'meel', 'MEEL'].includes(compact)) return '呂冠美';
+            return name;
         }
 
         function renderTeamStaffFilters() {
