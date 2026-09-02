@@ -30,6 +30,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- LINE LIFF SDK -->
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
@@ -1156,6 +1159,7 @@
         let heatmapRequestSerial = 0;
         let activePriceMenuTab = 'houses';
         let activePriceUnit = 'all';
+        let maintenancePdfExport = null;
         const PUBLIC_PRICE_EXTRAS = Object.freeze({
             showcase: Object.freeze([
                 { unit: 'A3', floor: 18, area: '-', price: 150 }, { unit: 'A5', floor: 18, area: '-', price: 210 },
@@ -1886,6 +1890,8 @@
         function closeCrmModal() {
             document.getElementById('crm-action-modal').classList.add('hidden');
             document.getElementById('modal-content').innerHTML = '';
+            if (maintenancePdfExport?.url) URL.revokeObjectURL(maintenancePdfExport.url);
+            maintenancePdfExport = null;
         }
 
         function openFollowUpEditor(id) {
@@ -2251,7 +2257,7 @@
                         <span class="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-800">${m.狀態}</span>
                     </div>
                     <p class="text-xs text-gray-600">${m.問題描述}</p>
-                    <div class="flex flex-wrap justify-end gap-2 mt-3">${photoButton(m, 'maintenance')}<button type="button" onclick="exportMaintenanceReport('${m.id}')" class="px-3 py-2 text-xs font-bold rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800"><i class="fas fa-file-export mr-1"></i>匯出報告（含照片）</button>${recordActionButtons(m, 'maintenance')}</div>
+                    <div class="flex flex-wrap justify-end gap-2 mt-3">${photoButton(m, 'maintenance')}<button type="button" onclick="exportMaintenanceReport('${m.id}')" class="px-3 py-2 text-xs font-bold rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800"><i class="fas fa-file-pdf mr-1"></i>產生 PDF 報告</button>${recordActionButtons(m, 'maintenance')}</div>
                 </div>
             `).join('');
         }
@@ -2260,8 +2266,10 @@
             const row = (appData.maintenance || []).find(item => String(item.id) === String(id));
             if (!row) return;
             const button = document.querySelector(`button[onclick="exportMaintenanceReport('${escapeJs(String(id))}')"]`);
-            if (button) { button.disabled = true; button.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>整理中'; }
+            if (button) { button.disabled = true; button.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>產生中'; }
             try {
+                if (!window.html2canvas || !window.jspdf?.jsPDF) throw new Error('PDF 元件尚未載入，請重新開啟 CRM 後再試。');
+                showCrmModal('PDF 報告產生中', '<div class="py-8 text-center text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-2 text-gold-600"></i>正在整理維修資料與照片…</div>', '售後維修通報');
                 const refs = parsePhotoRefs(row);
                 const images = [];
                 for (const ref of refs) {
@@ -2270,19 +2278,71 @@
                 }
                 const fields = Object.entries(row).filter(([key]) => key !== '照片' && key !== 'id' && row[key] !== '' && row[key] !== null && row[key] !== undefined);
                 const fieldRows = fields.map(([key, value]) => `<tr><th>${escapeHtml(key)}</th><td>${escapeHtml(value)}</td></tr>`).join('');
-                const photoMarkup = images.length ? images.map(image => `<figure><img src="data:${escapeHtml(image.mimeType)};base64,${image.data}" alt="${escapeHtml(image.name)}"><figcaption>${escapeHtml(image.name)}</figcaption></figure>`).join('') : '<p class="empty">本通報沒有可讀取的照片。</p>';
-                const report = `<!doctype html><html lang="zh-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>維修通報-${escapeHtml(row.戶別 || row.id)}</title><style>body{font-family:Arial,"Noto Sans TC",sans-serif;color:#172033;max-width:900px;margin:0 auto;padding:28px;background:#f7f8fb}h1{color:#10233f;border-bottom:3px solid #c59b3f;padding-bottom:12px}h2{margin-top:28px;color:#173d62}table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden}th,td{padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}th{width:28%;background:#f1f5f9;color:#475569}figure{display:inline-block;width:calc(50% - 18px);margin:8px;vertical-align:top}img{display:block;width:100%;max-height:520px;object-fit:contain;border:1px solid #dbe3ed;border-radius:10px;background:#fff}figcaption{font-size:12px;color:#64748b;margin-top:6px}.empty{color:#64748b}@media print{body{background:#fff;padding:0}figure{break-inside:avoid}}</style></head><body><h1>售後維修通報報告</h1><p>匯出時間：${escapeHtml(new Date().toLocaleString('zh-TW'))}</p><h2>維修資料</h2><table>${fieldRows}</table><h2>現場照片（${images.length} 張）</h2><section>${photoMarkup}</section></body></html>`;
-                const blob = new Blob([report], { type: 'text/html;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const anchor = document.createElement('a');
-                anchor.href = url;
-                anchor.download = `維修通報-${String(row.戶別 || row.id || '報告').replace(/[\\/:*?"<>|]/g, '_')}.html`;
-                document.body.appendChild(anchor); anchor.click(); anchor.remove();
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                alert('維修報告已匯出，可開啟 HTML 後列印或另存為 PDF。');
+                const photoMarkup = images.length ? images.map(image => `<figure style="display:inline-block;width:46%;margin:2%;vertical-align:top;break-inside:avoid"><img src="data:${escapeHtml(image.mimeType)};base64,${image.data}" alt="${escapeHtml(image.name)}" style="display:block;width:100%;max-height:430px;object-fit:contain;border:1px solid #dbe3ed;border-radius:10px"><figcaption style="font-size:12px;color:#64748b;margin-top:6px">${escapeHtml(image.name)}</figcaption></figure>`).join('') : '<p style="color:#64748b">本通報沒有可讀取的照片。</p>';
+                const reportNode = document.createElement('div');
+                reportNode.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;padding:38px;background:#fff;color:#172033;font-family:Arial,"Noto Sans TC",sans-serif;line-height:1.55;';
+                reportNode.innerHTML = `<h1 style="color:#10233f;border-bottom:4px solid #c59b3f;padding-bottom:14px;margin:0">售後維修通報報告</h1><p style="color:#64748b">匯出時間：${escapeHtml(new Date().toLocaleString('zh-TW'))}</p><h2 style="margin-top:28px;color:#173d62">維修資料</h2><table style="width:100%;border-collapse:collapse">${fieldRows.replaceAll('<th>', '<th style="width:28%;padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top;background:#f1f5f9;color:#475569">').replaceAll('<td>', '<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top">')}</table><h2 style="margin-top:28px;color:#173d62">現場照片（${images.length} 張）</h2><section>${photoMarkup}</section>`;
+                document.body.appendChild(reportNode);
+                await Promise.all(Array.from(reportNode.querySelectorAll('img')).map(image => image.complete ? Promise.resolve() : new Promise(resolve => { image.onload = image.onerror = resolve; })));
+                const canvas = await window.html2canvas(reportNode, { scale: 1.5, backgroundColor: '#ffffff', useCORS: true, logging: false });
+                reportNode.remove();
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+                const pageWidthMm = 210;
+                const pageHeightMm = 297;
+                const pageHeightPx = Math.floor(canvas.width * pageHeightMm / pageWidthMm);
+                for (let offset = 0, page = 0; offset < canvas.height; offset += pageHeightPx, page++) {
+                    if (page) pdf.addPage();
+                    const sliceHeight = Math.min(pageHeightPx, canvas.height - offset);
+                    const pageCanvas = document.createElement('canvas');
+                    pageCanvas.width = canvas.width;
+                    pageCanvas.height = sliceHeight;
+                    pageCanvas.getContext('2d').drawImage(canvas, 0, offset, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+                    pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, pageWidthMm, sliceHeight * pageWidthMm / canvas.width, undefined, 'FAST');
+                }
+                const filename = `維修通報-${String(row.戶別 || row.id || '報告').replace(/[\\/:*?"<>|]/g, '_')}.pdf`;
+                const blob = pdf.output('blob');
+                if (maintenancePdfExport?.url) URL.revokeObjectURL(maintenancePdfExport.url);
+                const file = new File([blob], filename, { type: 'application/pdf' });
+                maintenancePdfExport = { file, filename, url: URL.createObjectURL(blob) };
+                showCrmModal('PDF 報告已完成', `<div class="space-y-3"><p class="text-sm text-gray-600">報告包含維修資料與 ${images.length} 張照片。</p><button type="button" onclick="previewMaintenancePdf()" class="w-full rounded-xl bg-slate-800 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-eye mr-2"></i>預覽 PDF</button><button type="button" onclick="shareMaintenancePdf()" class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-share-nodes mr-2"></i>分享 PDF</button><button type="button" onclick="downloadMaintenancePdf()" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700"><i class="fas fa-download mr-2"></i>下載 PDF</button></div>`, '售後維修通報');
+            } catch (error) {
+                console.error(error);
+                showCrmModal('PDF 產生失敗', `<p class="text-sm text-red-600">${escapeHtml(error?.message || '請稍後重新嘗試。')}</p>`, '售後維修通報');
             } finally {
-                if (button) { button.disabled = false; button.innerHTML = '<i class="fas fa-file-export mr-1"></i>匯出報告'; }
+                if (button) { button.disabled = false; button.innerHTML = '<i class="fas fa-file-pdf mr-1"></i>產生 PDF 報告'; }
             }
+        }
+
+        function previewMaintenancePdf() {
+            if (!maintenancePdfExport?.url) return;
+            const preview = window.open(maintenancePdfExport.url, '_blank', 'noopener');
+            if (!preview) downloadMaintenancePdf();
+        }
+
+        async function shareMaintenancePdf() {
+            if (!maintenancePdfExport?.file) return;
+            try {
+                if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [maintenancePdfExport.file] }))) {
+                    await navigator.share({ title: '售後維修通報報告', files: [maintenancePdfExport.file] });
+                } else {
+                    downloadMaintenancePdf();
+                    alert('目前瀏覽器不支援直接分享，已改為下載 PDF。');
+                }
+            } catch (error) {
+                if (error?.name !== 'AbortError') {
+                    downloadMaintenancePdf();
+                    alert('無法開啟系統分享，已改為下載 PDF。');
+                }
+            }
+        }
+
+        function downloadMaintenancePdf() {
+            if (!maintenancePdfExport?.url) return;
+            const anchor = document.createElement('a');
+            anchor.href = maintenancePdfExport.url;
+            anchor.download = maintenancePdfExport.filename;
+            document.body.appendChild(anchor); anchor.click(); anchor.remove();
         }
 
         function fillRecordForm(formId, rows, id, buttonId, buttonText) {
