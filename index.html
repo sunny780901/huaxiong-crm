@@ -2238,9 +2238,21 @@
             if (uploaded.length) data.照片 = JSON.stringify(uploaded);
             const res = await apiPost(id ? 'updateMaintenance' : 'addMaintenance', data, id || null);
             if (res) {
-                alert(id ? '維修通報已更新！' : '維修通報送出成功！');
                 resetMaintenanceForm();
                 await fetchAllData();
+                if (id) {
+                    alert('維修通報已更新！');
+                    return;
+                }
+                const createdId = String(res.id || '');
+                if (!createdId) {
+                    alert('維修通報已建立，但系統無法辨識報告編號，請從維修清單重新產生 PDF。');
+                    return;
+                }
+                const reportCreated = await exportMaintenanceReport(createdId);
+                if (!reportCreated) {
+                    alert('維修通報與照片已安全保存，但 PDF 報告尚未建立成功，請從維修清單重新產生。');
+                }
             }
         }
 
@@ -2253,16 +2265,41 @@
                 container.innerHTML = '<p class="text-center text-gray-500 py-4 text-sm">目前無維修通報</p>';
                 return;
             }
-            container.innerHTML = appData.maintenance.map(m => `
+            container.innerHTML = appData.maintenance.map(m => {
+                const completed = ['已完成', '完成'].includes(String(m.狀態 || ''));
+                const completeButton = !completed && canEditOwnedRecord(m) ? `<button type="button" onclick="completeMaintenance('${m.id}')" class="px-3 py-2 text-xs font-bold rounded-lg border border-green-200 bg-green-50 text-green-800"><i class="fas fa-circle-check mr-1"></i>完成維修</button>` : '';
+                return `
                 <div class="p-3 bg-gray-50 rounded-xl border border-gray-200 text-sm">
                     <div class="flex justify-between items-center mb-1">
                         <span class="font-bold text-gray-800">${m.戶別} (${m.通報人})</span>
-                        <span class="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-800">${m.狀態}</span>
+                        <span class="text-xs px-2 py-0.5 rounded ${completed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${m.狀態}</span>
                     </div>
                     <p class="text-xs text-gray-600">${m.問題描述}</p>
-                    <div class="flex flex-wrap justify-end gap-2 mt-3">${photoButton(m, 'maintenance')}<button type="button" onclick="exportMaintenanceReport('${m.id}')" class="px-3 py-2 text-xs font-bold rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800"><i class="fas fa-file-pdf mr-1"></i>產生 PDF 報告</button>${recordActionButtons(m, 'maintenance')}</div>
+                    <div class="flex flex-wrap justify-end gap-2 mt-3">${photoButton(m, 'maintenance')}<button type="button" onclick="exportMaintenanceReport('${m.id}')" class="px-3 py-2 text-xs font-bold rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800"><i class="fas fa-file-pdf mr-1"></i>產生含照片 PDF</button>${completeButton}${recordActionButtons(m, 'maintenance')}</div>
                 </div>
-            `).join('');
+            `; }).join('');
+        }
+
+        async function completeMaintenance(id) {
+            const row = (appData.maintenance || []).find(item => String(item.id) === String(id));
+            if (!row) return;
+            const photoCount = parsePhotoRefs(row).length;
+            if (!confirm(`確認這筆維修已完成？${photoCount ? `系統會先把 ${photoCount} 張照片嵌入 PDF 報告，` : ''}完成後 CRM 照片會移至 Google Drive 垃圾桶。`)) return;
+            if (photoCount && maintenancePdfExport?.recordId !== String(id)) {
+                const reportCreated = await exportMaintenanceReport(id);
+                if (!reportCreated) {
+                    alert('PDF 報告尚未建立成功，因此沒有完成維修，也沒有刪除照片。');
+                    return;
+                }
+            }
+            const result = await apiPost('completeMaintenance', {}, id);
+            if (!result) return;
+            await fetchAllData();
+            if (maintenancePdfExport?.recordId === String(id)) {
+                showCrmModal('維修已完成', `<div class="space-y-3"><p class="rounded-xl bg-green-50 p-3 text-sm text-green-800">照片已保存在 PDF 報告中；CRM 原始照片已移除 ${Number(result.photosMovedToTrash || 0)} 張。</p><button type="button" onclick="openMaintenancePdfPortal(false)" class="w-full rounded-xl bg-slate-800 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-eye mr-2"></i>預覽含照片 PDF</button><button type="button" onclick="openMaintenancePdfPortal(true)" class="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-arrow-up-right-from-square mr-2"></i>開啟／下載 PDF</button><button type="button" onclick="shareMaintenancePdf()" class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-share-nodes mr-2"></i>分享 PDF 檔案</button></div>`, '售後維修通報');
+            } else {
+                alert('維修已完成。');
+            }
         }
 
         async function exportMaintenanceReport(id) {
@@ -2307,18 +2344,20 @@
                 const blob = pdf.output('blob');
                 if (maintenancePdfExport?.url) URL.revokeObjectURL(maintenancePdfExport.url);
                 const file = new File([blob], filename, { type: 'application/pdf' });
-                maintenancePdfExport = { file, filename, url: URL.createObjectURL(blob), secureUrl: '' };
+                maintenancePdfExport = { file, filename, url: URL.createObjectURL(blob), secureUrl: '', recordId: String(id), photoCount: images.length };
                 const pdfBase64 = await blobToBase64(blob);
                 const portal = await apiPost('saveMaintenancePdf', { module: 'maintenance', recordId: row.id, filename, pdfBase64 }, null, true);
                 if (portal?.url) maintenancePdfExport.secureUrl = portal.url;
                 const photoNotice = images.length ? `報告已成功載入 ${images.length} 張照片。` : refs.length ? `找到 ${refs.length} 個照片附件，但目前無法讀取，請確認 Drive 原始檔仍存在。` : '這筆通報沒有照片附件。';
                 const mobileButton = maintenancePdfExport.secureUrl ? '<button type="button" onclick="openMaintenancePdfPortal(false)" class="w-full rounded-xl bg-slate-800 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-eye mr-2"></i>手機預覽 PDF</button><button type="button" onclick="openMaintenancePdfPortal(true)" class="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-arrow-up-right-from-square mr-2"></i>用 Safari／Chrome 開啟下載</button>' : '<p class="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">安全預覽連結建立失敗，仍可使用下方分享功能。</p>';
-                showCrmModal('PDF 報告已完成', `<div class="space-y-3"><p class="text-sm text-gray-600">${escapeHtml(photoNotice)}</p>${mobileButton}<button type="button" onclick="shareMaintenancePdf()" class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-share-nodes mr-2"></i>分享 PDF 檔案</button><button type="button" onclick="downloadMaintenancePdf()" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700"><i class="fas fa-download mr-2"></i>下載 PDF</button><p class="text-xs text-gray-500">安全預覽連結 30 分鐘後失效，PDF 與照片仍維持私人存取。</p></div>`, '售後維修通報');
+                showCrmModal('PDF 報告已完成', `<div class="space-y-3"><p class="text-sm text-gray-600">${escapeHtml(photoNotice)}</p>${mobileButton}<button type="button" onclick="shareMaintenancePdf()" class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-share-nodes mr-2"></i>分享 PDF 檔案</button><button type="button" onclick="downloadMaintenancePdf()" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700"><i class="fas fa-download mr-2"></i>下載 PDF</button><p class="text-xs text-gray-500">PDF 安全預覽連結 30 分鐘後失效；照片會完整保存在 PDF 內。</p></div>`, '售後維修通報');
+                return true;
             } catch (error) {
                 console.error(error);
                 showCrmModal('PDF 產生失敗', `<p class="text-sm text-red-600">${escapeHtml(error?.message || '請稍後重新嘗試。')}</p>`, '售後維修通報');
+                return false;
             } finally {
-                if (button) { button.disabled = false; button.innerHTML = '<i class="fas fa-file-pdf mr-1"></i>產生 PDF 報告'; }
+                if (button) { button.disabled = false; button.innerHTML = '<i class="fas fa-file-pdf mr-1"></i>產生含照片 PDF'; }
             }
         }
 
@@ -2454,6 +2493,7 @@
         }
 
         function parsePhotoRefs(row) {
+            if (['已完成', '完成'].includes(String(row?.狀態 || ''))) return [];
             const refs = [];
             try {
                 const parsed = JSON.parse(row?.照片 || '[]');
@@ -2489,14 +2529,17 @@
             const row = rows.find(item => String(item.id) === String(id));
             const refs = parsePhotoRefs(row || {});
             if (!refs.length) return;
-            document.getElementById('modal-kicker').innerText = '私密附件';
+            document.getElementById('modal-kicker').innerText = '照片附件';
             document.getElementById('modal-title').innerText = '照片載入中…';
             document.getElementById('modal-content').innerHTML = '<p class="text-sm text-gray-500">正在安全讀取照片</p>';
             document.getElementById('crm-action-modal').classList.remove('hidden');
             const images = [];
             for (const ref of refs) {
                 const result = await apiPost('getPhoto', { module, recordId: row.id, fileId: ref.id }, null, true);
-                if (result?.data) images.push(`<img src="data:${escapeHtml(result.mimeType || 'image/jpeg')};base64,${result.data}" alt="${escapeHtml(ref.name || '附件照片')}" class="w-full rounded-xl border border-gray-200">`);
+                if (result?.data) {
+                    const downloadAction = result.downloadUrl ? `<a href="${escapeHtml(result.downloadUrl)}" target="_blank" rel="noopener" class="rounded-lg bg-blue-600 px-3 py-2 font-bold text-white"><i class="fas fa-download mr-1"></i>查看／下載原圖</a>` : '<span class="text-amber-700">原檔未開放下載，可在 CRM 內查看</span>';
+                    images.push(`<figure class="space-y-2"><img src="data:${escapeHtml(result.mimeType || 'image/jpeg')};base64,${result.data}" alt="${escapeHtml(ref.name || '附件照片')}" class="w-full rounded-xl border border-gray-200"><figcaption class="flex items-center justify-between gap-2 text-xs text-gray-500"><span>${escapeHtml(ref.name || '附件照片')}</span>${downloadAction}</figcaption></figure>`);
+                }
             }
             document.getElementById('modal-title').innerText = `附件照片（${images.length}）`;
             document.getElementById('modal-content').innerHTML = images.join('<div class="h-3"></div>') || '<p class="text-sm text-red-600">無法讀取照片或你沒有權限。</p>';
