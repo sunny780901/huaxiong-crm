@@ -1,6 +1,9 @@
 <html lang="zh-TW"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>華雄天地 CRM 系統</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -2273,7 +2276,7 @@
                 const refs = parsePhotoRefs(row);
                 const images = [];
                 for (const ref of refs) {
-                    const result = await apiPost('getPhoto', { module: 'maintenance', fileId: ref.id }, null, true);
+                    const result = await apiPost('getPhoto', { module: 'maintenance', recordId: row.id, fileId: ref.id }, null, true);
                     if (result?.data) images.push({ name: ref.name || '維修照片', mimeType: result.mimeType || 'image/jpeg', data: result.data });
                 }
                 const fields = Object.entries(row).filter(([key]) => key !== '照片' && key !== 'id' && row[key] !== '' && row[key] !== null && row[key] !== undefined);
@@ -2304,8 +2307,13 @@
                 const blob = pdf.output('blob');
                 if (maintenancePdfExport?.url) URL.revokeObjectURL(maintenancePdfExport.url);
                 const file = new File([blob], filename, { type: 'application/pdf' });
-                maintenancePdfExport = { file, filename, url: URL.createObjectURL(blob) };
-                showCrmModal('PDF 報告已完成', `<div class="space-y-3"><p class="text-sm text-gray-600">報告包含維修資料與 ${images.length} 張照片。</p><button type="button" onclick="previewMaintenancePdf()" class="w-full rounded-xl bg-slate-800 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-eye mr-2"></i>預覽 PDF</button><button type="button" onclick="shareMaintenancePdf()" class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-share-nodes mr-2"></i>分享 PDF</button><button type="button" onclick="downloadMaintenancePdf()" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700"><i class="fas fa-download mr-2"></i>下載 PDF</button></div>`, '售後維修通報');
+                maintenancePdfExport = { file, filename, url: URL.createObjectURL(blob), secureUrl: '' };
+                const pdfBase64 = await blobToBase64(blob);
+                const portal = await apiPost('saveMaintenancePdf', { module: 'maintenance', recordId: row.id, filename, pdfBase64 }, null, true);
+                if (portal?.url) maintenancePdfExport.secureUrl = portal.url;
+                const photoNotice = images.length ? `報告已成功載入 ${images.length} 張照片。` : refs.length ? `找到 ${refs.length} 個照片附件，但目前無法讀取，請確認 Drive 原始檔仍存在。` : '這筆通報沒有照片附件。';
+                const mobileButton = maintenancePdfExport.secureUrl ? '<button type="button" onclick="openMaintenancePdfPortal(false)" class="w-full rounded-xl bg-slate-800 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-eye mr-2"></i>手機預覽 PDF</button><button type="button" onclick="openMaintenancePdfPortal(true)" class="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-arrow-up-right-from-square mr-2"></i>用 Safari／Chrome 開啟下載</button>' : '<p class="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">安全預覽連結建立失敗，仍可使用下方分享功能。</p>';
+                showCrmModal('PDF 報告已完成', `<div class="space-y-3"><p class="text-sm text-gray-600">${escapeHtml(photoNotice)}</p>${mobileButton}<button type="button" onclick="shareMaintenancePdf()" class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-share-nodes mr-2"></i>分享 PDF 檔案</button><button type="button" onclick="downloadMaintenancePdf()" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700"><i class="fas fa-download mr-2"></i>下載 PDF</button><p class="text-xs text-gray-500">安全預覽連結 30 分鐘後失效，PDF 與照片仍維持私人存取。</p></div>`, '售後維修通報');
             } catch (error) {
                 console.error(error);
                 showCrmModal('PDF 產生失敗', `<p class="text-sm text-red-600">${escapeHtml(error?.message || '請稍後重新嘗試。')}</p>`, '售後維修通報');
@@ -2315,9 +2323,20 @@
         }
 
         function previewMaintenancePdf() {
+            if (maintenancePdfExport?.secureUrl) return openMaintenancePdfPortal(false);
             if (!maintenancePdfExport?.url) return;
-            const preview = window.open(maintenancePdfExport.url, '_blank', 'noopener');
-            if (!preview) downloadMaintenancePdf();
+            showCrmModal('PDF 預覽', `<div class="space-y-3"><iframe src="${maintenancePdfExport.url}" title="PDF 預覽" class="w-full rounded-xl border border-gray-200" style="height:65vh"></iframe><button type="button" onclick="shareMaintenancePdf()" class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">分享 PDF</button></div>`, '售後維修通報');
+        }
+
+        function openMaintenancePdfPortal(external) {
+            const url = maintenancePdfExport?.secureUrl;
+            if (!url) return previewMaintenancePdf();
+            if (external && window.liff?.isInClient?.()) {
+                liff.openWindow({ url, external: true });
+                return;
+            }
+            const opened = window.open(url, '_blank', 'noopener');
+            if (!opened) window.location.href = url;
         }
 
         async function shareMaintenancePdf() {
@@ -2325,24 +2344,37 @@
             try {
                 if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [maintenancePdfExport.file] }))) {
                     await navigator.share({ title: '售後維修通報報告', files: [maintenancePdfExport.file] });
+                } else if (maintenancePdfExport.secureUrl && navigator.share) {
+                    await navigator.share({ title: '售後維修通報報告', text: '此安全報告連結將於 30 分鐘後失效。', url: maintenancePdfExport.secureUrl });
                 } else {
-                    downloadMaintenancePdf();
-                    alert('目前瀏覽器不支援直接分享，已改為下載 PDF。');
+                    openMaintenancePdfPortal(true);
                 }
             } catch (error) {
                 if (error?.name !== 'AbortError') {
-                    downloadMaintenancePdf();
-                    alert('無法開啟系統分享，已改為下載 PDF。');
+                    openMaintenancePdfPortal(true);
                 }
             }
         }
 
         function downloadMaintenancePdf() {
+            if (window.liff?.isInClient?.() && maintenancePdfExport?.secureUrl) {
+                openMaintenancePdfPortal(true);
+                return;
+            }
             if (!maintenancePdfExport?.url) return;
             const anchor = document.createElement('a');
             anchor.href = maintenancePdfExport.url;
             anchor.download = maintenancePdfExport.filename;
             document.body.appendChild(anchor); anchor.click(); anchor.remove();
+        }
+
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
         }
 
         function fillRecordForm(formId, rows, id, buttonId, buttonText) {
@@ -2422,7 +2454,29 @@
         }
 
         function parsePhotoRefs(row) {
-            try { const parsed = JSON.parse(row.照片 || '[]'); return Array.isArray(parsed) ? parsed : []; } catch (_) { return []; }
+            const refs = [];
+            try {
+                const parsed = JSON.parse(row?.照片 || '[]');
+                if (Array.isArray(parsed)) parsed.forEach(ref => { if (ref?.id) refs.push(ref); });
+            } catch (_) {}
+            const legacyText = [row?.照片, row?.問題描述, row?.任務內容, row?.備註].filter(Boolean).join('\n');
+            const drivePatterns = [/[?&]id=([A-Za-z0-9_-]{20,})/g, /\/d\/([A-Za-z0-9_-]{20,})(?:\/|$)/g];
+            drivePatterns.forEach(pattern => {
+                let match;
+                while ((match = pattern.exec(legacyText))) refs.push({ id: match[1], name: legacyPhotoName(legacyText, match.index) });
+            });
+            const seen = new Set();
+            return refs.filter(ref => {
+                const id = String(ref.id || '');
+                if (!id || seen.has(id)) return false;
+                seen.add(id); return true;
+            });
+        }
+
+        function legacyPhotoName(text, urlIndex) {
+            const before = String(text || '').slice(Math.max(0, urlIndex - 120), urlIndex);
+            const match = before.match(/附件\s*[：:]\s*([^\s\n]+)\s*$/);
+            return match?.[1] || '舊版維修照片';
         }
 
         function photoButton(row, module) {
@@ -2441,7 +2495,7 @@
             document.getElementById('crm-action-modal').classList.remove('hidden');
             const images = [];
             for (const ref of refs) {
-                const result = await apiPost('getPhoto', { module, fileId: ref.id }, null, true);
+                const result = await apiPost('getPhoto', { module, recordId: row.id, fileId: ref.id }, null, true);
                 if (result?.data) images.push(`<img src="data:${escapeHtml(result.mimeType || 'image/jpeg')};base64,${result.data}" alt="${escapeHtml(ref.name || '附件照片')}" class="w-full rounded-xl border border-gray-200">`);
             }
             document.getElementById('modal-title').innerText = `附件照片（${images.length}）`;
