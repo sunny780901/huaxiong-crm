@@ -910,6 +910,22 @@
                         <div class="report-chart-wrap"><canvas id="report-room-chart"></canvas></div>
                         <p id="report-room-empty" class="report-empty-note hidden">此期間尚無需求房型資料</p>
                     </div>
+                    <div class="report-chart-card">
+                        <h3 class="report-chart-head"><span class="report-chart-icon"><i class="fas fa-briefcase"></i></span>職業分析</h3>
+                        <div class="report-chart-wrap"><canvas id="report-occupation-chart"></canvas></div>
+                        <p id="report-occupation-empty" class="report-empty-note hidden">此期間尚無職業資料</p>
+                    </div>
+                    <div class="report-chart-card">
+                        <h3 class="report-chart-head"><span class="report-chart-icon"><i class="fas fa-users"></i></span>年齡分析</h3>
+                        <div class="report-chart-wrap"><canvas id="report-age-chart"></canvas></div>
+                        <p id="report-age-empty" class="report-empty-note hidden">此期間尚無年齡資料</p>
+                    </div>
+                    <div class="report-chart-card">
+                        <h3 class="report-chart-head"><span class="report-chart-icon"><i class="fas fa-building"></i></span>棟別分析</h3>
+                        <p class="text-xs text-gray-500 mb-2">依賞屋戶別統計來客組數（A1、A2、B1 等），未填資料另列。</p>
+                        <div class="report-chart-wrap"><canvas id="report-building-chart"></canvas></div>
+                        <p id="report-building-empty" class="report-empty-note hidden">此期間尚無棟別資料</p>
+                    </div>
                 </div>
             </section>
 
@@ -2834,6 +2850,9 @@
             renderReportChart('source', 'report-source-chart', 'report-source-empty', countReportDimension(visitRows, ['來源管道', '媒體來源']), 'doughnut');
             renderReportChart('area', 'report-area-chart', 'report-area-empty', countReportDimension(visitRows, ['居住行政區', '居住區域']), 'bar');
             renderReportChart('room', 'report-room-chart', 'report-room-empty', countReportDimension(visitRows, ['需求房型']), 'bar');
+            renderReportChart('occupation', 'report-occupation-chart', 'report-occupation-empty', countReportDimension(visitRows, ['職業']), 'bar');
+            renderReportChart('age', 'report-age-chart', 'report-age-empty', countReportDimension(visitRows, ['年齡區間']), 'bar');
+            renderReportChart('building', 'report-building-chart', 'report-building-empty', countReportDimension(visitRows, ['賞屋戶別']), 'bar');
         }
 
         function renderReportChart(key, canvasId, emptyId, counts, type) {
