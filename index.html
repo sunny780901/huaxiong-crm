@@ -289,14 +289,15 @@
         .appointment-empty{background:#f1f5f9;min-height:100px}
         .task-card{padding:1rem;border:1px solid #dbe3ed;border-radius:1rem;background:linear-gradient(145deg,#fff,#f8fafc);box-shadow:0 8px 20px rgba(23,49,77,.08)}
         .task-workflow{display:grid;gap:.5rem;margin-top:.7rem}
-        .task-stage{display:grid;grid-template-columns:3.2rem minmax(0,1fr);align-items:center;gap:.45rem;padding:.5rem;border:1px solid #e2e8f0;border-radius:.75rem;background:#fff;min-width:0;overflow:hidden}
+        .task-stage{display:grid;grid-template-columns:3.2rem minmax(0,1fr);align-items:center;gap:.4rem;padding:.42rem;border:1px solid #e2e8f0;border-radius:.75rem;background:#fff;min-width:0;overflow:hidden}
         .task-stage.done{border-color:#a7e2ca;background:#f0fdf8}
         .task-stage-name{font-size:.72rem;font-weight:900;color:#17314d;white-space:nowrap}
-        .task-stage-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem;min-width:0}
+        .task-stage-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.28rem;min-width:0}
         .task-stage-actions{display:flex;gap:.3rem;align-items:center}
-        .task-stage input{min-width:0;width:100%;height:2.15rem;padding:.3rem .42rem;border:1px solid #cbd5e1;border-radius:.5rem;font-size:.69rem;background:#fff}
-        .task-stage-datetime{grid-column:1/-1;color-scheme:light}
-        .task-stage button{height:2.15rem;padding:.35rem .55rem;border-radius:.5rem;background:#173d62;color:#fff;font-size:.68rem;font-weight:800;white-space:nowrap}
+        .task-stage input{min-width:0;width:100%;height:1.9rem;min-height:1.9rem;max-height:1.9rem;padding:.2rem .32rem;border:1px solid #cbd5e1;border-radius:.45rem;font-size:.67rem;line-height:1;background:#fff;color-scheme:light}
+        .task-stage-datetime-wrap{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) 5.25rem;gap:.28rem;min-width:0}
+        .task-stage-datetime{grid-column:1/-1}
+        .task-stage button{height:1.9rem;padding:.25rem .48rem;border-radius:.45rem;background:#173d62;color:#fff;font-size:.66rem;font-weight:800;white-space:nowrap}
         .task-stage button.task-save{border:1px solid #c59b3f;background:#fff;color:#8b6427}
         .task-stage.done button{background:#0f766e}
         .task-stage button:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed}
@@ -2268,7 +2269,7 @@
                     const previousDone = index === 0 || Boolean(t[`${TASK_STAGES[index - 1]}完成時間`]);
                     const inputBase = `task-${String(t.id).replace(/[^a-zA-Z0-9_-]/g, '')}-${index}`;
                     const action = canOperate
-                        ? `<input id="${inputBase}-datetime" class="task-stage-datetime" type="datetime-local" value="${escapeHtml(stageDateTime)}" aria-label="${stage}日期與時間"><input id="${inputBase}-amount" type="number" min="0" step="0.01" value="${escapeHtml(amount)}" placeholder="金額（萬）" aria-label="${stage}繳款金額（萬）"><span class="task-stage-actions"><button class="task-save" type="button" onclick="saveTaskStage('${escapeJs(t.id)}','${stage}',${index},false)">儲存</button><button type="button" ${previousDone ? '' : 'disabled'} onclick="saveTaskStage('${escapeJs(t.id)}','${stage}',${index},true)">${finishedAt ? '更新' : '完成'}</button></span>`
+                        ? `<span class="task-stage-datetime-wrap"><input id="${inputBase}-date" type="date" value="${escapeHtml(stageDate)}" aria-label="${stage}日期"><input id="${inputBase}-time" type="time" value="${escapeHtml(stageTime)}" aria-label="${stage}時間"></span><input id="${inputBase}-amount" type="number" min="0" step="0.01" value="${escapeHtml(amount)}" placeholder="金額（萬）" aria-label="${stage}繳款金額（萬）"><span class="task-stage-actions"><button class="task-save" type="button" onclick="saveTaskStage('${escapeJs(t.id)}','${stage}',${index},false)">儲存</button><button type="button" ${previousDone ? '' : 'disabled'} onclick="saveTaskStage('${escapeJs(t.id)}','${stage}',${index},true)">${finishedAt ? '更新' : '完成'}</button></span>`
                         : `<span class="task-stage-datetime text-xs text-gray-600">${stageDateTime ? escapeHtml(stageDateTime.replace('T', ' ')) : '未填日期時間'}</span><span class="text-xs text-gray-600">${amount === '' ? '未填金額' : `${escapeHtml(amount)} 萬`}</span><span class="text-xs font-bold ${finishedAt ? 'text-emerald-700' : 'text-gray-400'}">${finishedAt ? '已完成' : '未完成'}</span>`;
                     return `<div class="task-stage ${finishedAt ? 'done' : ''}"><span class="task-stage-name">${index + 1}. ${stage}</span><div class="task-stage-controls">${action}</div></div>`;
                 }).join('');
@@ -2286,7 +2287,9 @@
             const row = (appData.tasks || []).find(item => String(item.id) === String(id));
             if (!row || !canEditOwnedRecord(row) || TASK_STAGES[index] !== stage) return;
             const inputBase = `task-${String(id).replace(/[^a-zA-Z0-9_-]/g, '')}-${index}`;
-            const dateTimeText = String(document.getElementById(`${inputBase}-datetime`)?.value ?? '').trim();
+            const dateText = String(document.getElementById(`${inputBase}-date`)?.value ?? '').trim();
+            const timeText = String(document.getElementById(`${inputBase}-time`)?.value ?? '').trim();
+            const dateTimeText = dateText && timeText ? `${dateText}T${timeText}` : '';
             const amountText = String(document.getElementById(`${inputBase}-amount`)?.value ?? '').trim();
             if (!/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(dateTimeText)) {
                 alert(`請填寫${stage}日期與時間。`);
