@@ -2261,10 +2261,10 @@
                 const canOperate = canEditOwnedRecord(t);
                 const workflow = TASK_STAGES.map((stage, index) => {
                     const finishedAt = String(t[`${stage}完成時間`] || '');
-                    const stageDate = String(t[`${stage}日期`] || finishedAt.slice(0, 10));
-                    const stageTime = String(t[`${stage}時間`] || (stage === '簽約' ? t.指定時間 : '') || '');
+                    const stageDate = normalizeTaskDate(t[`${stage}日期`] || finishedAt.slice(0, 10));
+                    const stageTime = normalizeTaskTime(t[`${stage}時間`] || (stage === '簽約' ? t.指定時間 : ''));
                     const stageDateTime = stageDate && stageTime ? `${stageDate}T${stageTime.slice(0, 5)}` : '';
-                    const amount = t[`${stage}繳款金額`] ?? '';
+                    const amount = normalizeTaskAmount(t[`${stage}繳款金額`]);
                     const previousDone = index === 0 || Boolean(t[`${TASK_STAGES[index - 1]}完成時間`]);
                     const inputBase = `task-${String(t.id).replace(/[^a-zA-Z0-9_-]/g, '')}-${index}`;
                     const action = canOperate
@@ -2274,7 +2274,7 @@
                 }).join('');
                 return `<article class="task-card text-sm">
                     <div class="flex flex-wrap justify-between items-start gap-3">
-                        <div><p class="font-bold text-gray-800">${escapeHtml([t.戶別樓層, t.客戶姓名].filter(Boolean).join('｜') || t.任務內容 || '未填戶別樓層與客戶姓名')}</p><p class="text-xs text-gray-500 mt-1">負責人：${escapeHtml(t.負責人 || '')}｜日期：${escapeHtml(t.期限 || '')}｜時間：${escapeHtml(t.指定時間 || '未填')}</p></div>
+                        <div><p class="font-bold text-gray-800">${escapeHtml([t.戶別樓層, t.客戶姓名].filter(Boolean).join('｜') || t.任務內容 || '未填戶別樓層與客戶姓名')}</p><p class="text-xs text-gray-500 mt-1">負責人：${escapeHtml(t.負責人 || '')}｜日期：${escapeHtml(normalizeTaskDate(t.期限) || '未填')}｜時間：${escapeHtml(normalizeTaskTime(t.指定時間) || '未填')}</p></div>
                         <div class="flex items-center gap-2"><span class="text-xs px-2.5 py-1 rounded-full ${t.狀態 === '已完成' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-850'}">${escapeHtml(t.目前流程 || t.狀態 || '簽約')}</span>${photoButton(t, 'tasks')}${recordActionButtons(t, 'task')}</div>
                     </div>
                     <div class="task-workflow-scroll"><div class="task-workflow">${workflow}</div></div>
@@ -2301,9 +2301,41 @@
             if (!confirm(`確定${actionText}「${stage}」？\n日期時間：${dateTimeText.replace('T', ' ')}${amountText === '' ? '' : `\n繳款金額：${Number(amountText).toLocaleString('zh-TW')} 萬`}`)) return;
             const result = await apiPost('advanceTaskStage', { stage, dateTime: dateTimeText, amount: amountText === '' ? null : Number(amountText), complete: markComplete }, id);
             if (!result) return;
-            if (!markComplete) alert(`${stage}日期時間已儲存，當日早上 09:30 會列入 LINE 提醒。`);
             await fetchAllData();
+            const savedRow = (appData.tasks || []).find(item => String(item.id) === String(id));
+            const savedDate = normalizeTaskDate(savedRow?.[`${stage}日期`]);
+            const savedTime = normalizeTaskTime(savedRow?.[`${stage}時間`]);
+            const savedAmount = normalizeTaskAmount(savedRow?.[`${stage}繳款金額`]);
+            const expectedDate = dateTimeText.slice(0, 10);
+            const expectedTime = dateTimeText.slice(11, 16);
+            const amountSaved = amountText === '' || (savedAmount !== '' && Number(savedAmount) === Number(amountText));
+            if (savedDate !== expectedDate || savedTime !== expectedTime || !amountSaved) {
+                alert(`${stage}資料未完整寫入，請不要重複操作並通知專案經理。\n日期：${savedDate || '未寫入'}\n時間：${savedTime || '未寫入'}\n金額：${savedAmount === '' ? '未寫入' : `${savedAmount} 萬`}`);
+                return;
+            }
+            if (!markComplete) alert(`${stage}日期時間${amountText === '' ? '' : '與金額'}已儲存，當日早上 09:30 會列入 LINE 提醒。`);
             switchView('tasks');
+        }
+
+        function normalizeTaskDate(value) {
+            const text = String(value ?? '').trim();
+            const match = text.match(/(\d{4}-\d{2}-\d{2})/);
+            return match ? match[1] : '';
+        }
+
+        function normalizeTaskTime(value) {
+            const text = String(value ?? '').trim();
+            const direct = text.match(/^([01]?\d|2[0-3]):([0-5]\d)/);
+            if (direct) return `${direct[1].padStart(2, '0')}:${direct[2]}`;
+            const embedded = text.match(/[T\s]([01]?\d|2[0-3]):([0-5]\d)/);
+            return embedded ? `${embedded[1].padStart(2, '0')}:${embedded[2]}` : '';
+        }
+
+        function normalizeTaskAmount(value) {
+            if (value === undefined || value === null || String(value).trim() === '') return '';
+            const text = String(value).replace(/,/g, '').replace(/萬/g, '').trim();
+            const amount = Number(text);
+            return Number.isFinite(amount) ? String(amount) : '';
         }
 
         // 維修通報
