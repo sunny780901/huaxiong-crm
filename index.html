@@ -1714,8 +1714,12 @@
         function canEditOwnedRecord(row, fallbackName) {
             if (currentUser.role === '專案經理') return true;
             if (currentUser.role !== '銷售主任') return false;
+            const currentName = normalizeReceptionStaffName(currentUser.name);
+            const permittedNames = [row.建立者姓名, fallbackName]
+                .filter(Boolean)
+                .map(normalizeReceptionStaffName);
             return (row.建立者LINE && String(row.建立者LINE) === String(currentUser.lineId)) ||
-                String(row.建立者姓名 || fallbackName || '') === String(currentUser.name || '');
+                permittedNames.includes(currentName);
         }
 
         function editCustomer(id) {
@@ -2253,7 +2257,11 @@
             }
         }
 
-        function editTask(id) { fillRecordForm('task-form', appData.tasks, id, 'task-submit', '儲存進度修改'); }
+        function editTask(id) {
+            const row = (appData.tasks || []).find(item => String(item.id) === String(id));
+            if (!row || !canEditOwnedRecord(row, row.負責人)) return;
+            fillRecordForm('task-form', appData.tasks, id, 'task-submit', '儲存進度修改', row.負責人);
+        }
         function resetTaskForm() { resetRecordForm('task-form', 'task-submit', '儲存進度'); }
 
         function renderTasksList() {
@@ -2263,7 +2271,7 @@
                 return;
             }
             container.innerHTML = appData.tasks.map(t => {
-                const canOperate = canEditOwnedRecord(t);
+                const canOperate = canEditOwnedRecord(t, t.負責人);
                 const workflow = TASK_STAGES.map((stage, index) => {
                     const finishedAt = String(t[`${stage}完成時間`] || '');
                     const stageDate = normalizeTaskDate(t[`${stage}日期`] || finishedAt.slice(0, 10));
@@ -2280,7 +2288,7 @@
                 return `<article class="task-card text-sm">
                     <div class="flex flex-wrap justify-between items-start gap-3">
                         <div><p class="font-bold text-gray-800">${escapeHtml([t.戶別樓層, t.客戶姓名].filter(Boolean).join('｜') || t.任務內容 || '未填戶別樓層與客戶姓名')}</p><p class="text-xs text-gray-500 mt-1">負責人：${escapeHtml(t.負責人 || '')}｜日期：${escapeHtml(normalizeTaskDate(t.期限) || '未填')}｜時間：${escapeHtml(normalizeTaskTime(t.指定時間) || '未填')}</p></div>
-                        <div class="flex items-center gap-2"><span class="text-xs px-2.5 py-1 rounded-full ${t.狀態 === '已完成' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-850'}">${escapeHtml(t.目前流程 || t.狀態 || '簽約')}</span>${photoButton(t, 'tasks')}${recordActionButtons(t, 'task')}</div>
+                         <div class="flex items-center gap-2"><span class="text-xs px-2.5 py-1 rounded-full ${t.狀態 === '已完成' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-850'}">${escapeHtml(t.目前流程 || t.狀態 || '簽約')}</span>${photoButton(t, 'tasks')}${recordActionButtons(t, 'task', t.負責人)}</div>
                     </div>
                     <div class="task-workflow-scroll"><div class="task-workflow">${workflow}</div></div>
                 </article>`;
@@ -2289,7 +2297,7 @@
 
         async function saveTaskStage(id, stage, index, markComplete) {
             const row = (appData.tasks || []).find(item => String(item.id) === String(id));
-            if (!row || !canEditOwnedRecord(row) || TASK_STAGES[index] !== stage) return;
+            if (!row || !canEditOwnedRecord(row, row.負責人) || TASK_STAGES[index] !== stage) return;
             const inputBase = `task-${String(id).replace(/[^a-zA-Z0-9_-]/g, '')}-${index}`;
             const dateText = String(document.getElementById(`${inputBase}-date`)?.value ?? '').trim();
             const timeText = String(document.getElementById(`${inputBase}-time`)?.value ?? '').trim();
@@ -2534,9 +2542,9 @@
             });
         }
 
-        function fillRecordForm(formId, rows, id, buttonId, buttonText) {
+        function fillRecordForm(formId, rows, id, buttonId, buttonText, fallbackName = '') {
             const row = rows.find(item => String(item.id) === String(id));
-            if (!row || !canEditOwnedRecord(row)) return;
+            if (!row || !canEditOwnedRecord(row, fallbackName)) return;
             const form = document.getElementById(formId);
             Object.keys(row).forEach(key => { if (form.elements[key] && form.elements[key].type !== 'file') form.elements[key].value = row[key] ?? ''; });
             form.elements.id.value = row.id;
@@ -2549,8 +2557,8 @@
             form.reset(); form.elements.id.value = ''; document.getElementById(buttonId).innerText = buttonText;
         }
 
-        function recordActionButtons(row, type) {
-            if (!canEditOwnedRecord(row)) return '';
+        function recordActionButtons(row, type, fallbackName = '') {
+            if (!canEditOwnedRecord(row, fallbackName)) return '';
             const title = { appointment: '預約', task: '已購客進度', maintenance: '維修通報' }[type];
             return `<button onclick="edit${type[0].toUpperCase() + type.slice(1)}('${row.id}')" class="px-2 py-1 text-xs rounded bg-indigo-50 text-indigo-700">編輯</button><button onclick="deleteOwnedRecord('${type}','${row.id}','${title}')" class="px-2 py-1 text-xs rounded bg-red-50 text-red-700">刪除</button>`;
         }
