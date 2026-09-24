@@ -1475,6 +1475,15 @@
         function acceptAppData(data) {
             appData = data || appData;
             if (!Array.isArray(appData.teamCustomers)) appData.teamCustomers = appData.customers || [];
+            const canonicalizeCustomerStaff = row => ({ ...row, 接待人員: normalizeReceptionStaffName(row.接待人員) });
+            appData.customers = (appData.customers || []).map(canonicalizeCustomerStaff);
+            appData.teamCustomers = (appData.teamCustomers || []).map(canonicalizeCustomerStaff);
+            appData.users = (appData.users || []).map(row => ({ ...row, 姓名: normalizeReceptionStaffName(row.姓名) }));
+            appData.tasks = (appData.tasks || []).map(row => ({
+                ...row,
+                負責人: normalizeReceptionStaffName(row.負責人),
+                建立者姓名: normalizeReceptionStaffName(row.建立者姓名)
+            }));
             if (!Array.isArray(appData.followUps)) appData.followUps = [];
             if (!appData.heatmaps || typeof appData.heatmaps !== 'object') appData.heatmaps = null;
             if (!appData.priceMenu || typeof appData.priceMenu !== 'object') appData.priceMenu = { houses: [], showcase: [], copy: [], options: [], parking: [], updatedAt: '' };
@@ -1483,7 +1492,7 @@
                 if (!appData.priceMenu[key].length) appData.priceMenu[key] = PUBLIC_PRICE_EXTRAS[key].map(row => ({ ...row }));
             });
             if (data && data.session) {
-                currentUser.name = data.session.name || currentUser.name;
+                currentUser.name = normalizeReceptionStaffName(data.session.name || currentUser.name);
                 currentUser.lineId = data.session.lineId || currentUser.lineId;
                 currentUser.role = data.session.role || '';
                 currentUser.permissions = data.session.permissions || currentUser.permissions;
@@ -1704,7 +1713,7 @@
             const data = Object.fromEntries(formData.entries());
             const id = data.id || '';
             delete data.id;
-            if (currentUser.role === '銷售主任') data.接待人員 = currentUser.name;
+            if (currentUser.role === '銷售主任') data.接待人員 = normalizeReceptionStaffName(currentUser.name);
 
             const res = await apiPost(id ? 'updateCustomer' : 'addCustomer', data, id || null);
             if (res) {
