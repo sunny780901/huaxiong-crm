@@ -1696,6 +1696,10 @@
         // 客戶表單提交
         async function handleCustomerSubmit(event) {
             event.preventDefault();
+            const submitButton = document.getElementById('customer-submit');
+            const originalButtonText = submitButton.innerText;
+            submitButton.disabled = true;
+            submitButton.innerText = '儲存中…';
             const formData = new FormData(event.target);
             const data = Object.fromEntries(formData.entries());
             const id = data.id || '';
@@ -1704,11 +1708,58 @@
 
             const res = await apiPost(id ? 'updateCustomer' : 'addCustomer', data, id || null);
             if (res) {
-                alert(id ? '客戶資料已更新！' : '客戶資料新增成功！');
+                applyCustomerWriteResult(res, id);
                 resetCustomerForm();
-                await fetchAllData();
                 switchView('customer-list');
+                showSaveToast(id ? '客戶資料已更新' : '客戶資料新增成功');
+            } else {
+                submitButton.disabled = false;
+                submitButton.innerText = originalButtonText;
             }
+        }
+
+        function applyCustomerWriteResult(result, existingId = '') {
+            const recordId = String(result?.id || existingId || '');
+            if (!recordId) return;
+            const mergeInto = rows => {
+                const list = Array.isArray(rows) ? rows.slice() : [];
+                const index = list.findIndex(item => String(item.id) === recordId);
+                if (index >= 0) list[index] = { ...list[index], ...result, id: recordId };
+                else list.unshift({ ...result, id: recordId });
+                return list;
+            };
+            appData.customers = mergeInto(appData.customers);
+            appData.teamCustomers = mergeInto(appData.teamCustomers);
+            document.getElementById('stat-total-customers').innerText = appData.customers.length;
+            document.getElementById('stat-closed-deals').innerText = appData.customers.filter(c => c.成交狀態 === '正式成交').length;
+            renderCustomerList();
+            renderTeamOverview();
+            renderSalesReports();
+        }
+
+        function removeCustomerLocally(id) {
+            const targetId = String(id);
+            appData.customers = (appData.customers || []).filter(item => String(item.id) !== targetId);
+            appData.teamCustomers = (appData.teamCustomers || []).filter(item => String(item.id) !== targetId);
+            document.getElementById('stat-total-customers').innerText = appData.customers.length;
+            document.getElementById('stat-closed-deals').innerText = appData.customers.filter(c => c.成交狀態 === '正式成交').length;
+            renderCustomerList();
+            renderTeamOverview();
+            renderSalesReports();
+        }
+
+        function showSaveToast(message) {
+            let toast = document.getElementById('crm-save-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'crm-save-toast';
+                toast.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 z-[100] bg-emerald-700 text-white px-5 py-3 rounded-xl shadow-xl text-sm font-bold transition-opacity';
+                document.body.appendChild(toast);
+            }
+            toast.innerText = message;
+            toast.style.opacity = '1';
+            clearTimeout(showSaveToast.timer);
+            showSaveToast.timer = setTimeout(() => { toast.style.opacity = '0'; }, 1800);
         }
 
         function canEditOwnedRecord(row, fallbackName) {
@@ -1742,7 +1793,10 @@
 
         async function deleteCustomerRecord(id) {
             if (!confirm('確定刪除這筆客戶資料嗎？刪除後無法復原。')) return;
-            if (await apiPost('deleteCustomer', {}, id)) await fetchAllData();
+            if (await apiPost('deleteCustomer', {}, id)) {
+                removeCustomerLocally(id);
+                showSaveToast('客戶資料已刪除');
+            }
         }
 
         function renderCustomerList() {
