@@ -1205,6 +1205,7 @@
         let activePriceMenuTab = 'houses';
         let activePriceUnit = 'all';
         let maintenancePdfExport = null;
+        const pendingApiRequests = new Set();
         const PUBLIC_PRICE_EXTRAS = Object.freeze({
             showcase: Object.freeze([
                 { unit: 'A3', floor: 18, area: '-', price: 150 }, { unit: 'A5', floor: 18, area: '-', price: 210 },
@@ -1670,6 +1671,9 @@
                 if (!suppressAlert) alert('請先輸入 CRM 存取密碼。');
                 return null;
             }
+            const requestKey = `${action}:${id || ''}:${JSON.stringify(data || {})}`;
+            if (pendingApiRequests.has(requestKey)) return null;
+            pendingApiRequests.add(requestKey);
             try {
                 const response = await fetch(SCRIPT_URL, {
                     method: 'POST',
@@ -1699,6 +1703,8 @@
                 currentUser.lastErrorMessage = currentUser.lastErrorMessage || err.message || '網路連線失敗';
                 if (!suppressAlert) alert('操作失敗: ' + err.message);
                 return null;
+            } finally {
+                pendingApiRequests.delete(requestKey);
             }
         }
 
@@ -1755,6 +1761,40 @@
             renderCustomerList();
             renderTeamOverview();
             renderSalesReports();
+        }
+
+        function upsertLocalRecord(collection, result, existingId = '') {
+            const id = String(result?.id || existingId || '');
+            if (!id) return null;
+            const rows = Array.isArray(appData[collection]) ? appData[collection].slice() : [];
+            const index = rows.findIndex(item => String(item.id) === id);
+            const record = index >= 0 ? { ...rows[index], ...result, id } : { ...result, id };
+            if (index >= 0) rows[index] = record; else rows.unshift(record);
+            appData[collection] = rows;
+            return record;
+        }
+
+        function removeLocalRecord(collection, id) {
+            const target = String(id);
+            appData[collection] = (appData[collection] || []).filter(item => String(item.id) !== target);
+        }
+
+        function renderChangedModule(collection) {
+            if (collection === 'appointments') {
+                document.getElementById('stat-today-appointments').innerText = (appData.appointments || []).filter(a => a.狀態 === '待到訪').length;
+                renderAppointmentsList();
+            } else if (collection === 'tasks') {
+                document.getElementById('stat-pending-tasks').innerText = (appData.tasks || []).filter(t => t.狀態 === '待辦').length;
+                renderTasksList();
+            } else if (collection === 'maintenance') {
+                renderMaintenanceList();
+            } else if (collection === 'schedules') {
+                renderScheduleCalendar();
+            } else if (collection === 'users') {
+                renderUserManagement();
+                renderCustomerStaffOptions();
+                renderScheduleStaffOptions();
+            }
         }
 
         function showSaveToast(message) {
@@ -2025,9 +2065,11 @@
             const data = Object.fromEntries(new FormData(event.target).entries());
             const result = await apiPost('addCustomerFollowUp', data, id);
             if (!result) return;
+            upsertLocalRecord('followUps', result);
+            applyCustomerWriteResult({ id, 接待補充: data.內容 || '', 下次追蹤日: data.下次追蹤日 || '' }, id);
             closeCrmModal();
-            await fetchAllData();
             switchView('team-overview');
+            showSaveToast('追蹤紀錄已儲存');
         }
 
         function openDealEditor(id) {
@@ -2056,9 +2098,10 @@
             const data = Object.fromEntries(new FormData(event.target).entries());
             const result = await apiPost('updateCustomerProgress', data, id);
             if (!result) return;
+            applyCustomerWriteResult(result, id);
             closeCrmModal();
-            await fetchAllData();
             switchView('team-overview');
+            showSaveToast('成交與簽約資料已儲存');
         }
 
         function openCancelEditor(id) {
@@ -2079,9 +2122,10 @@
             if (!confirm('確定將此客戶標記為退戶嗎？')) return;
             const result = await apiPost('updateCustomerProgress', data, id);
             if (!result) return;
+            applyCustomerWriteResult(result, id);
             closeCrmModal();
-            await fetchAllData();
             switchView('team-overview');
+            showSaveToast('客戶已標記退戶');
         }
 
         async function quickProgress(id, mode) {
@@ -2090,8 +2134,9 @@
             if (!confirm(message)) return;
             const result = await apiPost('updateCustomerProgress', data, id);
             if (!result) return;
-            await fetchAllData();
+            applyCustomerWriteResult(result, id);
             switchView('team-overview');
+            showSaveToast(mode === 'signed' ? '已標記為已簽約' : '簽約提醒已取消');
         }
 
         function openCustomerTimeline(id) {
@@ -2154,8 +2199,10 @@
             const box = document.getElementById('invite-result');
             box.classList.remove('hidden');
             box.innerHTML = `<p class="text-xs text-gray-500">請立即複製給新同仁（72 小時內、僅能使用一次）</p><div class="mt-2 flex items-center justify-between gap-3"><code class="text-xl font-bold tracking-widest text-emerald-800">${escapeHtml(result.inviteCode)}</code><button type="button" onclick="navigator.clipboard.writeText('${result.inviteCode}').then(()=>alert('邀請碼已複製'))" class="rounded-lg bg-emerald-100 text-emerald-800 px-3 py-2 text-xs font-bold">複製</button></div>`;
-            await fetchAllData();
+            appData.invites = [{ id: `local-${Date.now()}`, 職稱: result.職稱, 有效期限: result.有效期限, 狀態: '未使用', 建立時間: new Date().toISOString() }, ...(appData.invites || [])];
+            renderInviteHistory();
             switchView('users');
+            showSaveToast('一次性邀請碼已建立');
         }
 
         function renderInviteHistory() {
@@ -2170,8 +2217,10 @@
             if (!confirm(`確定要${labels[action] || '操作'}此帳號嗎？`)) return;
             const result = await apiPost(action, {}, id);
             if (!result) return;
-            await fetchAllData();
+            upsertLocalRecord('users', result, id);
+            renderChangedModule('users');
             switchView('users');
+            showSaveToast(`${labels[action] || '帳號操作'}已完成`);
         }
 
         async function handleUserSubmit(event) {
@@ -2187,10 +2236,13 @@
             delete values.id;
             const result = await apiPost(id ? 'updateUser' : 'addUser', values, id || null);
             if (!result) return;
-            alert(id ? '使用者資料已更新！' : '使用者已新增！');
+            let parsedPermissions = roleDefaultPermissions(values.職稱);
+            try { parsedPermissions = JSON.parse(values.功能權限 || '{}'); } catch (_) {}
+            upsertLocalRecord('users', { ...result, 姓名: normalizeReceptionStaffName(result.姓名 || values.姓名), permissions: parsedPermissions, 帳號狀態: result.帳號狀態 || '啟用' }, id);
             resetUserForm();
-            await fetchAllData();
+            renderChangedModule('users');
             switchView('users');
+            showSaveToast(id ? '使用者資料已更新' : '使用者已新增');
         }
 
         function editUser(id) {
@@ -2222,8 +2274,10 @@
             if (!user || !confirm(`確定要移除 ${user.姓名} 的 CRM 使用權限嗎？`)) return;
             const result = await apiPost('deleteUser', {}, id);
             if (!result) return;
-            await fetchAllData();
+            removeLocalRecord('users', id);
+            renderChangedModule('users');
             switchView('users');
+            showSaveToast('使用者已移除');
         }
 
         // 預約管理
@@ -2233,11 +2287,12 @@
             const id = data.id || ''; delete data.id;
             const res = await apiPost(id ? 'updateAppointment' : 'addAppointment', data, id || null);
             if (res) {
-                alert(id ? '預約已更新！' : '預約新增成功！');
+                upsertLocalRecord('appointments', res, id);
                 const savedDate = appointmentDateKey(data.預約日期);
                 if (savedDate) appointmentCalendarMonth = new Date(Number(savedDate.slice(0, 4)), Number(savedDate.slice(5, 7)) - 1, 1);
                 resetAppointmentForm();
-                await fetchAllData();
+                renderChangedModule('appointments');
+                showSaveToast(id ? '預約已更新' : '預約新增成功');
             }
         }
 
@@ -2314,9 +2369,10 @@
             if (uploaded.length) data.照片 = JSON.stringify(uploaded);
             const res = await apiPost(id ? 'updateTask' : 'addTask', data, id || null);
             if (res) {
-                alert(id ? '已購客進度已更新！' : '已購客進度新增成功！');
+                upsertLocalRecord('tasks', res, id);
                 resetTaskForm();
-                await fetchAllData();
+                renderChangedModule('tasks');
+                showSaveToast(id ? '已購客進度已更新' : '已購客進度新增成功');
             }
         }
 
@@ -2379,7 +2435,8 @@
             if (!confirm(`確定${actionText}「${stage}」？\n日期時間：${dateTimeText.replace('T', ' ')}${amountText === '' ? '' : `\n繳款金額：${Number(amountText).toLocaleString('zh-TW')} 萬`}`)) return;
             const result = await apiPost('advanceTaskStage', { stage, dateTime: dateTimeText, amount: amountText === '' ? null : Number(amountText), complete: markComplete }, id);
             if (!result) return;
-            await fetchAllData();
+            upsertLocalRecord('tasks', result, id);
+            renderChangedModule('tasks');
             const savedRow = (appData.tasks || []).find(item => String(item.id) === String(id));
             const savedDate = normalizeTaskDate(savedRow?.[`${stage}日期`]);
             const savedTime = normalizeTaskTime(savedRow?.[`${stage}時間`]);
@@ -2427,10 +2484,11 @@
             if (uploaded.length) data.照片 = JSON.stringify(uploaded);
             const res = await apiPost(id ? 'updateMaintenance' : 'addMaintenance', data, id || null);
             if (res) {
+                upsertLocalRecord('maintenance', res, id);
                 resetMaintenanceForm();
-                await fetchAllData();
+                renderChangedModule('maintenance');
                 if (id) {
-                    alert('維修通報已更新！');
+                    showSaveToast('維修通報已更新');
                     return;
                 }
                 const createdId = String(res.id || '');
@@ -2483,7 +2541,8 @@
             }
             const result = await apiPost('completeMaintenance', {}, id);
             if (!result) return;
-            await fetchAllData();
+            upsertLocalRecord('maintenance', { ...result, 狀態: '已完成', 照片: '[]' }, id);
+            renderChangedModule('maintenance');
             if (maintenancePdfExport?.recordId === String(id)) {
                 showCrmModal('維修已完成', `<div class="space-y-3"><p class="rounded-xl bg-green-50 p-3 text-sm text-green-800">照片已保存在 PDF 報告中；CRM 原始照片已移除 ${Number(result.photosMovedToTrash || 0)} 張。</p><button type="button" onclick="openMaintenancePdfPortal(false)" class="w-full rounded-xl bg-slate-800 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-eye mr-2"></i>預覽含照片 PDF</button><button type="button" onclick="openMaintenancePdfPortal(true)" class="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-arrow-up-right-from-square mr-2"></i>開啟／下載 PDF</button><button type="button" onclick="shareMaintenancePdf()" class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white"><i class="fas fa-share-nodes mr-2"></i>分享 PDF 檔案</button></div>`, '售後維修通報');
             } else {
@@ -2629,7 +2688,13 @@
         async function deleteOwnedRecord(type, id, title) {
             if (!confirm(`確定刪除這筆${title}嗎？刪除後無法復原。`)) return;
             const actions = { appointment: 'deleteAppointment', task: 'deleteTask', maintenance: 'deleteMaintenance' };
-            if (await apiPost(actions[type], {}, id)) await fetchAllData();
+            if (await apiPost(actions[type], {}, id)) {
+                const collections = { appointment: 'appointments', task: 'tasks', maintenance: 'maintenance' };
+                const collection = collections[type];
+                removeLocalRecord(collection, id);
+                renderChangedModule(collection);
+                showSaveToast(`${title}已刪除`);
+            }
         }
 
         async function uploadSelectedPhotos(files, module) {
@@ -2649,21 +2714,15 @@
                 if (normalized.size > 2 * 1024 * 1024) { alert('照片處理後仍超過 2MB，請選擇較小的照片。'); return null; }
                 prepared.push(normalized);
             }
-            const uploaded = [];
             try {
-                for (let index = 0; index < prepared.length; index += 1) {
-                    const file = prepared[index];
-                    const payload = await fileToUploadPayload(file);
-                    const result = await apiPost('uploadPhotos', { module, files: [payload] }, null, true);
-                    if (!result) {
-                        const detail = currentUser.lastErrorMessage || '網路連線失敗';
-                        alert(`第 ${index + 1} 張照片上傳失敗：${detail}`);
-                        return null;
-                    }
-                    const refs = Array.isArray(result) ? result : (result.files || []);
-                    uploaded.push(...refs);
+                const payloads = await Promise.all(prepared.map(fileToUploadPayload));
+                const result = await apiPost('uploadPhotos', { module, files: payloads }, null, true);
+                if (!result) {
+                    const detail = currentUser.lastErrorMessage || '網路連線失敗';
+                    alert(`照片上傳失敗：${detail}`);
+                    return null;
                 }
-                return uploaded;
+                return Array.isArray(result) ? result : (result.files || []);
             } catch (error) {
                 alert('照片讀取失敗：' + (error?.message || '請重新選擇照片後再試'));
                 return null;
@@ -2762,11 +2821,12 @@
             const data = Object.fromEntries(formData.entries());
             const res = await apiPost('updateSchedule', data);
             if (res) {
+                upsertLocalRecord('schedules', res);
                 const selectedDate = new Date(data.日期 + 'T00:00:00');
                 scheduleCalendarMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-                alert('休假登記成功！');
                 event.target.reset();
-                await fetchAllData();
+                renderChangedModule('schedules');
+                showSaveToast('休假登記成功');
             }
         }
 
@@ -2827,7 +2887,9 @@
             if (!row || !confirm(`確定取消 ${row.人員} 在 ${row.日期} 的${row.狀態}嗎？`)) return;
             const res = await apiPost('deleteSchedule', {}, id);
             if (res) {
-                await fetchAllData();
+                removeLocalRecord('schedules', id);
+                renderChangedModule('schedules');
+                showSaveToast('休假資料已取消');
             }
         }
 
