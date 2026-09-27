@@ -758,11 +758,10 @@
                         <input type="text" name="客戶姓名" required="" placeholder="客戶姓名" class="border border-gray-300 rounded-lg p-2.5 text-sm">
                         <input type="tel" name="電話" required="" placeholder="聯絡電話" class="border border-gray-300 rounded-lg p-2.5 text-sm">
                         <input type="date" name="預約日期" required="" class="border border-gray-300 rounded-lg p-2.5 text-sm">
-                        <select name="預約時段" class="border border-gray-300 rounded-lg p-2.5 text-sm">
-                            <option value="上午 (10:00-12:00)">上午 (10:00-12:00)</option>
-                            <option value="下午 (14:00-16:00)">下午 (14:00-16:00)</option>
-                            <option value="晚上 (19:00-21:00)">晚上 (19:00-21:00)</option>
-                        </select>
+                        <label class="flex flex-col gap-1 text-xs font-bold text-gray-600">
+                            預約時間
+                            <input type="time" name="預約時段" value="10:00" step="60" required class="border border-gray-300 rounded-lg p-2.5 text-sm font-normal text-gray-800">
+                        </label>
                         <select name="狀態" class="border border-gray-300 rounded-lg p-2.5 text-sm">
                             <option value="待到訪">待到訪</option>
                             <option value="待回籠">待回籠</option>
@@ -2296,7 +2295,13 @@
             }
         }
 
-        function editAppointment(id) { fillRecordForm('appointment-form', appData.appointments, id, 'appointment-submit', '儲存預約修改'); }
+        function editAppointment(id) {
+            const row = (appData.appointments || []).find(item => String(item.id) === String(id));
+            if (!row || !canEditOwnedRecord(row)) return;
+            fillRecordForm('appointment-form', appData.appointments, id, 'appointment-submit', '儲存預約修改');
+            const input = document.querySelector('#appointment-form [name="預約時段"]');
+            if (input) input.value = normalizeAppointmentTime(row.預約時段) || '10:00';
+        }
         function resetAppointmentForm() { resetRecordForm('appointment-form', 'appointment-submit', '新增預約'); }
 
         function renderAppointmentsList() {
@@ -2347,6 +2352,12 @@
             if (/下午|晚上|中午/.test(text)) return 'pm';
             const time = text.match(/^(\d{1,2}):([0-5]\d)/);
             return time && Number(time[1]) < 24 ? (Number(time[1]) < 12 ? 'am' : 'pm') : '';
+        }
+
+        function normalizeAppointmentTime(value) {
+            const text = String(value || '').trim();
+            const match = text.match(/(?:^|\D)([01]?\d|2[0-3]):([0-5]\d)/);
+            return match ? `${match[1].padStart(2, '0')}:${match[2]}` : '';
         }
 
         function appointmentCalendarCard(row) {
