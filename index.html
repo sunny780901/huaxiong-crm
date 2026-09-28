@@ -2097,7 +2097,7 @@
             const data = Object.fromEntries(new FormData(event.target).entries());
             const result = await apiPost('updateCustomerProgress', data, id);
             if (!result) return;
-            applyCustomerWriteResult(result, id);
+            applyCustomerProgressResult(result, id);
             closeCrmModal();
             switchView('team-overview');
             showSaveToast('成交與簽約資料已儲存');
@@ -2121,7 +2121,7 @@
             if (!confirm('確定將此客戶標記為退戶嗎？')) return;
             const result = await apiPost('updateCustomerProgress', data, id);
             if (!result) return;
-            applyCustomerWriteResult(result, id);
+            applyCustomerProgressResult(result, id);
             closeCrmModal();
             switchView('team-overview');
             showSaveToast('客戶已標記退戶');
@@ -2133,9 +2133,20 @@
             if (!confirm(message)) return;
             const result = await apiPost('updateCustomerProgress', data, id);
             if (!result) return;
-            applyCustomerWriteResult(result, id);
+            applyCustomerProgressResult(result, id);
             switchView('team-overview');
             showSaveToast(mode === 'signed' ? '已標記為已簽約' : '簽約提醒已取消');
+        }
+
+        function applyCustomerProgressResult(result, customerId) {
+            const linkedTask = result?.linkedTask || null;
+            const customerResult = { ...(result || {}) };
+            delete customerResult.linkedTask;
+            applyCustomerWriteResult(customerResult, customerId);
+            if (linkedTask) {
+                upsertLocalRecord('tasks', linkedTask, linkedTask.id);
+                renderChangedModule('tasks');
+            }
         }
 
         function openCustomerTimeline(id) {
