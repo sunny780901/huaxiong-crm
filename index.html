@@ -2405,13 +2405,46 @@
         }
         function resetTaskForm() { resetRecordForm('task-form', 'task-submit', '儲存進度'); }
 
+        function isTaskCompleted(task) {
+            return ['已完成', '完成'].includes(String(task?.狀態 || '').trim())
+                || String(task?.目前流程 || '').trim() === '已完成'
+                || Boolean(String(task?.交屋完成時間 || '').trim());
+        }
+
+        function normalizeTaskUnitKey(value) {
+            const text = String(value || '').trim().toUpperCase()
+                .replace(/[／\\]/g, '/')
+                .replace(/[－—–]/g, '-')
+                .replace(/\s+/g, '');
+            const match = text.match(/^([A-Z]+\d+)[\/-]?(\d+)(?:F|樓)?$/);
+            return match ? `${match[1]}/${match[2]}F` : text.replace(/-/g, '/');
+        }
+
+        function taskProgressScore(task) {
+            return TASK_STAGES.reduce((score, stage) => score + (String(task?.[`${stage}完成時間`] || '').trim() ? 1 : 0), 0);
+        }
+
         function renderTasksList() {
             const container = document.getElementById('tasks-list-container');
-            if (appData.tasks.length === 0) {
+            const activeTasksByUnit = new Map();
+            const activeTasksWithoutUnit = [];
+            (appData.tasks || []).filter(task => !isTaskCompleted(task)).forEach(task => {
+                const unitKey = normalizeTaskUnitKey(task.戶別樓層);
+                if (!unitKey) {
+                    activeTasksWithoutUnit.push(task);
+                    return;
+                }
+                const existing = activeTasksByUnit.get(unitKey);
+                if (!existing || taskProgressScore(task) > taskProgressScore(existing)) {
+                    activeTasksByUnit.set(unitKey, task);
+                }
+            });
+            const activeTasks = [...activeTasksByUnit.values(), ...activeTasksWithoutUnit];
+            if (activeTasks.length === 0) {
                 container.innerHTML = '<p class="text-center text-gray-500 py-4 text-sm">目前無已購客進度</p>';
                 return;
             }
-            container.innerHTML = appData.tasks.map(t => {
+            container.innerHTML = activeTasks.map(t => {
                 const canOperate = canEditOwnedRecord(t, t.負責人);
                 const workflow = TASK_STAGES.map((stage, index) => {
                     const finishedAt = String(t[`${stage}完成時間`] || '');
