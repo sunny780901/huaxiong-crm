@@ -525,7 +525,8 @@
                                 <option value="盧易方">盧易方</option>
                                 <option value="呂冠美">呂冠美</option>
                                 <option value="宋嬌琦">宋嬌琦</option>
-                                <option value="芝妍Yan">芝妍Yan</option>
+                                <option value="林芝妍">林芝妍</option>
+                                <option value="楊沇鍰">楊沇鍰</option>
                             </select>
                         </div>
                         <div>
@@ -806,11 +807,12 @@
                     <h3 class="font-bold text-sm text-gold-800">新增已購客進度</h3>
                     <form id="task-form" onsubmit="handleTaskSubmit(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <input type="hidden" name="id">
-                        <select name="負責人" required="" class="border border-gray-300 rounded-lg p-2.5 text-sm">
+                        <select id="task-staff-select" name="負責人" required="" class="border border-gray-300 rounded-lg p-2.5 text-sm">
                             <option value="盧易方">盧易方</option>
                             <option value="呂冠美">呂冠美</option>
                             <option value="宋嬌琦">宋嬌琦</option>
-                            <option value="芝妍Yan">芝妍Yan</option>
+                            <option value="林芝妍">林芝妍</option>
+                            <option value="楊沇鍰">楊沇鍰</option>
                         </select>
                         <div class="grid grid-cols-2 gap-2">
                             <label class="sr-only" for="task-unit-floor">戶別樓層</label>
@@ -1009,7 +1011,8 @@
                             <option value="盧易方">盧易方</option>
                             <option value="呂冠美">呂冠美</option>
                             <option value="宋嬌琦">宋嬌琦</option>
-                            <option value="芝妍Yan">芝妍Yan</option>
+                            <option value="林芝妍">林芝妍</option>
+                            <option value="楊沇鍰">楊沇鍰</option>
                         </select>
                         <input type="date" name="日期" required="" class="border border-gray-300 rounded-lg p-2.5 text-sm">
                         <select name="狀態" required="" class="border border-gray-300 rounded-lg p-2.5 text-sm">
@@ -1494,6 +1497,11 @@
                 負責人: normalizeReceptionStaffName(row.負責人),
                 建立者姓名: normalizeReceptionStaffName(row.建立者姓名)
             }));
+            appData.schedules = (appData.schedules || []).map(row => ({
+                ...row,
+                人員: normalizeReceptionStaffName(row.人員),
+                建立者姓名: normalizeReceptionStaffName(row.建立者姓名)
+            }));
             if (!Array.isArray(appData.followUps)) appData.followUps = [];
             if (!appData.heatmaps || typeof appData.heatmaps !== 'object') appData.heatmaps = null;
             if (!appData.priceMenu || typeof appData.priceMenu !== 'object') appData.priceMenu = { houses: [], showcase: [], copy: [], options: [], parking: [], updatedAt: '' };
@@ -1527,6 +1535,7 @@
             renderCustomerStaffOptions();
             renderCustomerList();
             renderAppointmentsList();
+            renderTaskStaffOptions();
             renderTasksList();
             renderMaintenanceList();
             renderScheduleStaffOptions();
@@ -1656,14 +1665,33 @@
                 </article>`).join('');
         }
 
+        function getRegistrationStaffNames() {
+            // 選單姓名不等於登入帳號；保留固定案場人員，並納入後端已登記人員。
+            return [...new Set([
+                '盧易方', '呂冠美', '宋嬌琦', '林芝妍', '楊沇鍰',
+                ...(appData.users || []).map(user => user.姓名),
+                currentUser.name
+            ].map(normalizeReceptionStaffName).filter(Boolean))];
+        }
+
+        function setRegistrationStaffOptions(select, names) {
+            const selected = normalizeReceptionStaffName(select.value);
+            select.innerHTML = names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+            if (names.includes(selected)) select.value = selected;
+        }
+
         function renderCustomerStaffOptions() {
             const select = document.getElementById('customer-staff-select');
             if (!select) return;
-            let names = [...new Set((appData.users || []).map(user => user.姓名).filter(Boolean))];
-            if (currentUser.role === '銷售主任') names = [currentUser.name];
-            if (!names.length) names = [currentUser.name].filter(Boolean);
-            select.innerHTML = names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+            let names = getRegistrationStaffNames();
+            if (currentUser.role === '銷售主任') names = [normalizeReceptionStaffName(currentUser.name)].filter(Boolean);
+            setRegistrationStaffOptions(select, names);
             if (currentUser.role === '銷售主任') select.disabled = true;
+        }
+
+        function renderTaskStaffOptions() {
+            const select = document.getElementById('task-staff-select');
+            if (select) setRegistrationStaffOptions(select, getRegistrationStaffNames());
         }
 
         // 通用 API 請求方法
@@ -1802,6 +1830,7 @@
             } else if (collection === 'users') {
                 renderUserManagement();
                 renderCustomerStaffOptions();
+                renderTaskStaffOptions();
                 renderScheduleStaffOptions();
             }
         }
@@ -2900,9 +2929,7 @@
         function renderScheduleStaffOptions() {
             const select = document.getElementById('schedule-staff-select');
             if (!select) return;
-            const names = [...new Set((appData.users || []).map(user => user.姓名).filter(Boolean))];
-            if (!names.length) return;
-            select.innerHTML = names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+            setRegistrationStaffOptions(select, getRegistrationStaffNames());
         }
 
         function changeScheduleMonth(offset) {
