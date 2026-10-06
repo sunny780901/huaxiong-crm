@@ -1361,7 +1361,7 @@
                         <input id="access-code-input" type="password" inputmode="numeric" autocomplete="current-password"
                             class="w-full border border-gray-300 rounded-xl px-4 py-3 text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-gold-400"
                             placeholder="存取密碼／一次性邀請碼" required autofocus>
-                        <p id="access-code-error" class="${message ? '' : 'hidden'} text-sm text-red-600">${message}</p>
+                        <p id="access-code-error" class="${message ? '' : 'hidden'} text-sm text-red-600">${escapeHtml(message)}</p>
                         <button id="access-code-submit" type="submit" class="auth-submit">
                             驗證並進入 CRM
                         </button>
@@ -1369,8 +1369,18 @@
                 </div>`;
         }
 
-        function logoutCRM() {
+        async function logoutCRM() {
             if (!confirm('確定要登出華雄天地 CRM 嗎？下次需要重新輸入密碼。')) return;
+            // Do not claim logout succeeded while the server token remains valid.
+            if (currentUser.accessToken) {
+                const result = await apiPost('logout', {}, null, true);
+                if (!result || !result.loggedOut) {
+                    if (!isInvalidAuthSession(currentUser.lastErrorCode)) {
+                        alert('尚未完成伺服器登出，請保持連線後再試。');
+                        return;
+                    }
+                }
+            }
             clearAuthSession();
             currentUser.accessToken = '';
             currentUser.accessCode = '';
@@ -1612,7 +1622,7 @@
             });
             const filters = document.getElementById('price-menu-unit-filters');
             if (filters) {
-                filters.innerHTML = ['all', ...units].map(unit => `<button type="button" onclick="setPriceMenuUnit('${escapeHtml(unit)}')" class="shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${activePriceUnit === unit ? 'border-gold-600 bg-gold-600 text-white' : 'border-gray-200 bg-white text-gray-600'}">${unit === 'all' ? '全部' : escapeHtml(unit)}</button>`).join('');
+                filters.innerHTML = ['all', ...units].map(unit => `<button type="button" ${crmActionAttributes('setPriceMenuUnit', unit)} class="shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${activePriceUnit === unit ? 'border-gold-600 bg-gold-600 text-white' : 'border-gray-200 bg-white text-gray-600'}">${unit === 'all' ? '全部' : escapeHtml(unit)}</button>`).join('');
             }
             document.getElementById('price-menu-updated').textContent = menu.updatedAt ? `資料版本：${menu.updatedAt}` : '';
             const summaryLabel = { houses: '房屋表價', showcase: '實品屋價格', copy: 'COPY價格', options: '選配產品價格', parking: '車位表價' }[activePriceMenuTab];
@@ -1867,16 +1877,16 @@
                 <div class="py-3 flex justify-between items-center">
                     <div>
                         <div class="flex items-center space-x-2">
-                            <span class="font-bold text-gray-800 text-base">${c.姓名}</span>
-                            <span class="text-xs bg-gold-100 text-gold-800 px-2 py-0.5 rounded">${c.訪客類別 || '初訪'}</span>
-                            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">${c.成交狀態 || '未成交'}</span>
+                            <span class="font-bold text-gray-800 text-base">${escapeHtml(c.姓名)}</span>
+                            <span class="text-xs bg-gold-100 text-gold-800 px-2 py-0.5 rounded">${escapeHtml(c.訪客類別 || '初訪')}</span>
+                            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">${escapeHtml(c.成交狀態 || '未成交')}</span>
                         </div>
-                        <p class="text-xs text-gray-500 mt-1">電話：${c.電話} | 接待：${c.接待人員} | 日期：${c.訪客日期}</p>
+                        <p class="text-xs text-gray-500 mt-1">電話：${escapeHtml(c.電話)} | 接待：${escapeHtml(c.接待人員)} | 日期：${escapeHtml(c.訪客日期)}</p>
                         ${(c.賞屋戶別 || c.樓層) ? `<p class="text-xs text-indigo-600 mt-1 font-bold">賞屋：${escapeHtml([c.賞屋戶別, c.樓層].filter(Boolean).join('－'))}</p>` : ''}
                     </div>
                     <div class="flex flex-col items-end gap-2">
-                        <span class="text-xs text-gold-700 font-bold">${c.需求房型 || ''}</span>
-                        ${canEditOwnedRecord(c, c.接待人員) ? `<div class="flex gap-1"><button onclick="editCustomer('${c.id}')" class="px-2 py-1 text-xs rounded bg-indigo-50 text-indigo-700">編輯</button><button onclick="deleteCustomerRecord('${c.id}')" class="px-2 py-1 text-xs rounded bg-red-50 text-red-700">刪除</button></div>` : ''}
+                        <span class="text-xs text-gold-700 font-bold">${escapeHtml(c.需求房型 || '')}</span>
+                        ${canEditOwnedRecord(c, c.接待人員) ? `<div class="flex gap-1"><button ${crmActionAttributes('editCustomer', c.id)} class="px-2 py-1 text-xs rounded bg-indigo-50 text-indigo-700">編輯</button><button ${crmActionAttributes('deleteCustomerRecord', c.id)} class="px-2 py-1 text-xs rounded bg-red-50 text-red-700">刪除</button></div>` : ''}
                     </div>
                 </div>
             `).join('');
@@ -1916,9 +1926,9 @@
                         <p class="text-sm text-gray-600 mt-2">預定簽約：${escapeHtml(row.預定簽約日)}　<i class="fas fa-user text-gold-600 mr-1"></i>${escapeHtml(row.接待人員 || '')}</p>
                     </div>
                     <div class="flex flex-col gap-2">
-                        <button type="button" onclick="quickProgress('${row.id}','signed')" class="action-pill bg-emerald-600">標記已簽約</button>
-                        <button type="button" onclick="openDealEditor('${row.id}')" class="action-pill action-record">編輯／延期</button>
-                        <button type="button" onclick="quickProgress('${row.id}','cancel-sign')" class="action-pill action-cancel">標記取消</button>
+                        <button type="button" ${crmActionAttributes('quickProgress', row.id,'signed')} class="action-pill bg-emerald-600">標記已簽約</button>
+                        <button type="button" ${crmActionAttributes('openDealEditor', row.id)} class="action-pill action-record">編輯／延期</button>
+                        <button type="button" ${crmActionAttributes('quickProgress', row.id,'cancel-sign')} class="action-pill action-cancel">標記取消</button>
                     </div>
                 </div>`).join('');
         }
@@ -1955,7 +1965,7 @@
             if (!container) return;
             const names = [...new Set((appData.teamCustomers || []).map(row => row.接待人員).filter(Boolean))];
             container.innerHTML = [`<button type="button" onclick="setTeamStaff('')" class="staff-chip ${activeTeamStaff ? '' : 'active'}">全部</button>`]
-                .concat(names.map(name => `<button type="button" onclick="setTeamStaff('${escapeJs(name)}')" class="staff-chip ${activeTeamStaff === name ? 'active' : ''}">${escapeHtml(name)}</button>`)).join('');
+                .concat(names.map(name => `<button type="button" ${crmActionAttributes('setTeamStaff', name)} class="staff-chip ${activeTeamStaff === name ? 'active' : ''}">${escapeHtml(name)}</button>`)).join('');
         }
 
         function setTeamStaff(name) {
@@ -2011,10 +2021,10 @@
                 ${row.接待補充 ? `<p class="customer-note"><i class="fas fa-pen-to-square mr-1 text-gold-600"></i>${escapeHtml(row.接待補充)}</p>` : ''}
                 <div class="customer-actions">
                     <span class="status-badge ${badgeClass}">${escapeHtml(statusText)}</span>
-                    <button type="button" onclick="openDealEditor('${row.id}')" class="action-pill action-deal">${status === '正式成交' ? '編輯成交' : '標記成交'}</button>
-                    ${status === '正式成交' ? `<button type="button" onclick="openCancelEditor('${row.id}')" class="action-pill action-cancel">標記退戶</button>` : ''}
-                    <button type="button" onclick="openFollowUpEditor('${row.id}')" class="action-pill action-track">追蹤紀錄</button>
-                    <button type="button" onclick="openCustomerTimeline('${row.id}')" class="action-pill action-record">紀錄</button>
+                    <button type="button" ${crmActionAttributes('openDealEditor', row.id)} class="action-pill action-deal">${status === '正式成交' ? '編輯成交' : '標記成交'}</button>
+                    ${status === '正式成交' ? `<button type="button" ${crmActionAttributes('openCancelEditor', row.id)} class="action-pill action-cancel">標記退戶</button>` : ''}
+                    <button type="button" ${crmActionAttributes('openFollowUpEditor', row.id)} class="action-pill action-track">追蹤紀錄</button>
+                    <button type="button" ${crmActionAttributes('openCustomerTimeline', row.id)} class="action-pill action-record">紀錄</button>
                 </div>
             </article>`;
         }
@@ -2051,7 +2061,7 @@
             if (!customer) return;
             const today = formatDateKey(new Date());
             showCrmModal(`追蹤｜${customer.姓名 || ''}`, `
-                <form onsubmit="submitFollowUp(event,'${id}')" class="space-y-4">
+                <form ${crmSubmitAttributes('submitFollowUp', id)} class="space-y-4">
                     <div><label class="block text-xs font-bold text-gray-700 mb-1">記錄日期</label><input type="date" name="記錄日期" value="${today}" required class="w-full border border-gray-300 rounded-xl p-3 text-sm"></div>
                     <div><label class="block text-xs font-bold text-gray-700 mb-1">下次追蹤日</label><input type="date" name="下次追蹤日" value="${escapeHtml(customer.下次追蹤日 || '')}" class="w-full border border-gray-300 rounded-xl p-3 text-sm"></div>
                     <div><label class="block text-xs font-bold text-gray-700 mb-1">追蹤內容</label><textarea name="內容" rows="5" required placeholder="輸入本次聯繫狀況、客戶反應及下一步..." class="w-full border border-gray-300 rounded-xl p-3 text-sm"></textarea></div>
@@ -2075,7 +2085,7 @@
             const customer = getTeamCustomer(id);
             if (!customer) return;
             showCrmModal(`成交／簽約｜${customer.姓名 || ''}`, `
-                <form onsubmit="submitDealEditor(event,'${id}')" class="space-y-4">
+                <form ${crmSubmitAttributes('submitDealEditor', id)} class="space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div><label class="block text-xs font-bold text-gray-700 mb-1">成交戶別</label><input name="成交戶別" value="${escapeHtml(customer.成交戶別 || '')}" required placeholder="例如：A1/3F" class="w-full border border-gray-300 rounded-xl p-3 text-sm"></div>
                         <div><label class="block text-xs font-bold text-gray-700 mb-1">車位編號</label><input name="車位編號" value="${escapeHtml(customer.車位編號 || '')}" placeholder="例如：B3-112" class="w-full border border-gray-300 rounded-xl p-3 text-sm"></div>
@@ -2107,7 +2117,7 @@
             const customer = getTeamCustomer(id);
             if (!customer) return;
             showCrmModal(`退戶｜${customer.姓名 || ''}`, `
-                <form onsubmit="submitCancelEditor(event,'${id}')" class="space-y-4">
+                <form ${crmSubmitAttributes('submitCancelEditor', id)} class="space-y-4">
                     <div><label class="block text-xs font-bold text-gray-700 mb-1">退戶日期</label><input type="date" name="退戶日期" value="${formatDateKey(new Date())}" required class="w-full border border-gray-300 rounded-xl p-3 text-sm"></div>
                     <div><label class="block text-xs font-bold text-gray-700 mb-1">退戶原因</label><textarea name="退戶原因" rows="4" required placeholder="請記錄退戶原因" class="w-full border border-gray-300 rounded-xl p-3 text-sm"></textarea></div>
                     <input type="hidden" name="成交狀態" value="退戶"><input type="hidden" name="簽約狀態" value="取消">
@@ -2190,12 +2200,12 @@
                             <p class="mt-1 text-xs text-gray-500 font-mono break-all">${escapeHtml(user.lineId || '')}</p>
                         </div>
                         <div class="flex gap-2">
-                            ${status === '待審核' ? `<button type="button" onclick="manageUserStatus('approveUser','${user.id}')" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold">核准</button>` : ''}
-                            ${status === '啟用' && !isSelf ? `<button type="button" onclick="manageUserStatus('disableUser','${user.id}')" class="px-3 py-2 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold">停用</button>` : ''}
-                            ${status === '停用' ? `<button type="button" onclick="manageUserStatus('approveUser','${user.id}')" class="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold">重新啟用</button>` : ''}
-                            ${status === '啟用' && !isSelf ? `<button type="button" onclick="manageUserStatus('revokeUserSession','${user.id}')" class="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">強制登出</button>` : ''}
-                            <button type="button" onclick="editUser('${user.id}')" class="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100">編輯</button>
-                            <button type="button" onclick="removeUser('${user.id}')" ${isSelf ? 'disabled' : ''} class="px-3 py-2 rounded-lg text-xs font-bold ${isSelf ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-50 text-red-700 hover:bg-red-100'}">刪除</button>
+                            ${status === '待審核' ? `<button type="button" ${crmActionAttributes('manageUserStatus', 'approveUser',user.id)} class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold">核准</button>` : ''}
+                            ${status === '啟用' && !isSelf ? `<button type="button" ${crmActionAttributes('manageUserStatus', 'disableUser',user.id)} class="px-3 py-2 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold">停用</button>` : ''}
+                            ${status === '停用' ? `<button type="button" ${crmActionAttributes('manageUserStatus', 'approveUser',user.id)} class="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold">重新啟用</button>` : ''}
+                            ${status === '啟用' && !isSelf ? `<button type="button" ${crmActionAttributes('manageUserStatus', 'revokeUserSession',user.id)} class="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">強制登出</button>` : ''}
+                            <button type="button" ${crmActionAttributes('editUser', user.id)} class="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100">編輯</button>
+                            <button type="button" ${crmActionAttributes('removeUser', user.id)} ${isSelf ? 'disabled' : ''} class="px-3 py-2 rounded-lg text-xs font-bold ${isSelf ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-50 text-red-700 hover:bg-red-100'}">刪除</button>
                         </div>
                     </div>`;
             }).join('');
@@ -2208,7 +2218,7 @@
             if (!result) return;
             const box = document.getElementById('invite-result');
             box.classList.remove('hidden');
-            box.innerHTML = `<p class="text-xs text-gray-500">請立即複製給新同仁（72 小時內、僅能使用一次）</p><div class="mt-2 flex items-center justify-between gap-3"><code class="text-xl font-bold tracking-widest text-emerald-800">${escapeHtml(result.inviteCode)}</code><button type="button" onclick="navigator.clipboard.writeText('${result.inviteCode}').then(()=>alert('邀請碼已複製'))" class="rounded-lg bg-emerald-100 text-emerald-800 px-3 py-2 text-xs font-bold">複製</button></div>`;
+            box.innerHTML = `<p class="text-xs text-gray-500">請立即複製給新同仁（72 小時內、僅能使用一次）</p><div class="mt-2 flex items-center justify-between gap-3"><code class="text-xl font-bold tracking-widest text-emerald-800">${escapeHtml(result.inviteCode)}</code><button type="button" ${crmActionAttributes('copyInviteCode', result.inviteCode)} class="rounded-lg bg-emerald-100 text-emerald-800 px-3 py-2 text-xs font-bold">複製</button></div>`;
             appData.invites = [{ id: `local-${Date.now()}`, 職稱: result.職稱, 有效期限: result.有效期限, 狀態: '未使用', 建立時間: new Date().toISOString() }, ...(appData.invites || [])];
             renderInviteHistory();
             switchView('users');
@@ -2455,7 +2465,7 @@
                     const previousDone = index === 0 || Boolean(t[`${TASK_STAGES[index - 1]}完成時間`]);
                     const inputBase = `task-${String(t.id).replace(/[^a-zA-Z0-9_-]/g, '')}-${index}`;
                     const action = canOperate
-                        ? `<span class="task-stage-datetime-wrap"><input id="${inputBase}-date" type="date" value="${escapeHtml(stageDate)}" aria-label="${stage}日期"><input id="${inputBase}-time" type="time" value="${escapeHtml(stageTime)}" aria-label="${stage}時間"></span><input id="${inputBase}-amount" type="number" min="0" step="0.01" value="${escapeHtml(amount)}" placeholder="金額（萬）" aria-label="${stage}繳款金額（萬）"><span class="task-stage-actions"><button class="task-save" type="button" onclick="saveTaskStage('${escapeJs(t.id)}','${stage}',${index},false)">儲存</button><button type="button" ${previousDone ? '' : 'disabled'} onclick="saveTaskStage('${escapeJs(t.id)}','${stage}',${index},true)">${finishedAt ? '更新' : '完成'}</button></span>`
+                        ? `<span class="task-stage-datetime-wrap"><input id="${inputBase}-date" type="date" value="${escapeHtml(stageDate)}" aria-label="${stage}日期"><input id="${inputBase}-time" type="time" value="${escapeHtml(stageTime)}" aria-label="${stage}時間"></span><input id="${inputBase}-amount" type="number" min="0" step="0.01" value="${escapeHtml(amount)}" placeholder="金額（萬）" aria-label="${stage}繳款金額（萬）"><span class="task-stage-actions"><button class="task-save" type="button" ${crmActionAttributes('saveTaskStage', t.id,stage,index,false)}>儲存</button><button type="button" ${previousDone ? '' : 'disabled'} ${crmActionAttributes('saveTaskStage', t.id,stage,index,true)}>${finishedAt ? '更新' : '完成'}</button></span>`
                         : `<span class="task-stage-datetime text-xs text-gray-600">${stageDateTime ? escapeHtml(stageDateTime.replace('T', ' ')) : '未填日期時間'}</span><span class="text-xs text-gray-600">${amount === '' ? '未填金額' : `${escapeHtml(amount)} 萬`}</span><span class="text-xs font-bold ${finishedAt ? 'text-emerald-700' : 'text-gray-400'}">${finishedAt ? '已完成' : '未完成'}</span>`;
                     return `<div class="task-stage ${finishedAt ? 'done' : ''}"><span class="task-stage-name">${index + 1}. ${stage}</span><div class="task-stage-controls">${action}</div></div>`;
                 }).join('');
@@ -2569,15 +2579,15 @@
             }
             container.innerHTML = appData.maintenance.map(m => {
                 const completed = ['已完成', '完成'].includes(String(m.狀態 || ''));
-                const completeButton = !completed && canEditOwnedRecord(m) ? `<button type="button" onclick="completeMaintenance('${m.id}')" class="px-3 py-2 text-xs font-bold rounded-lg border border-green-200 bg-green-50 text-green-800"><i class="fas fa-circle-check mr-1"></i>完成維修</button>` : '';
+                const completeButton = !completed && canEditOwnedRecord(m) ? `<button type="button" ${crmActionAttributes('completeMaintenance', m.id)} class="px-3 py-2 text-xs font-bold rounded-lg border border-green-200 bg-green-50 text-green-800"><i class="fas fa-circle-check mr-1"></i>完成維修</button>` : '';
                 return `
                 <div class="p-3 bg-gray-50 rounded-xl border border-gray-200 text-sm">
                     <div class="flex justify-between items-center mb-1">
-                        <span class="font-bold text-gray-800">${m.戶別} (${m.通報人})</span>
-                        <span class="text-xs px-2 py-0.5 rounded ${completed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${m.狀態}</span>
+                        <span class="font-bold text-gray-800">${escapeHtml(m.戶別)} (${escapeHtml(m.通報人)})</span>
+                        <span class="text-xs px-2 py-0.5 rounded ${completed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${escapeHtml(m.狀態)}</span>
                     </div>
-                    <p class="text-xs text-gray-600">${m.問題描述}</p>
-                    <div class="flex flex-wrap justify-end gap-2 mt-3">${photoButton(m, 'maintenance')}<button type="button" onclick="exportMaintenanceReport('${m.id}')" class="px-3 py-2 text-xs font-bold rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800"><i class="fas fa-file-pdf mr-1"></i>產生含照片 PDF</button>${completeButton}${recordActionButtons(m, 'maintenance')}</div>
+                    <p class="text-xs text-gray-600">${escapeHtml(m.問題描述)}</p>
+                    <div class="flex flex-wrap justify-end gap-2 mt-3">${photoButton(m, 'maintenance')}<button type="button" ${crmActionAttributes('exportMaintenanceReport', m.id)} class="px-3 py-2 text-xs font-bold rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800"><i class="fas fa-file-pdf mr-1"></i>產生含照片 PDF</button>${completeButton}${recordActionButtons(m, 'maintenance')}</div>
                 </div>
             `; }).join('');
         }
@@ -2608,7 +2618,9 @@
         async function exportMaintenanceReport(id) {
             const row = (appData.maintenance || []).find(item => String(item.id) === String(id));
             if (!row) return;
-            const button = document.querySelector(`button[onclick="exportMaintenanceReport('${escapeJs(String(id))}')"]`);
+            const button = [...document.querySelectorAll('[data-crm-action="exportMaintenanceReport"]')].find(item => {
+                try { return String(JSON.parse(item.dataset.crmArgs)[0]) === String(id); } catch (_) { return false; }
+            });
             if (button) { button.disabled = true; button.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>產生中'; }
             try {
                 if (!window.html2canvas || !window.jspdf?.jsPDF) throw new Error('PDF 元件尚未載入，請重新開啟 CRM 後再試。');
@@ -2737,7 +2749,7 @@
         function recordActionButtons(row, type, fallbackName = '') {
             if (!canEditOwnedRecord(row, fallbackName)) return '';
             const title = { appointment: '預約', task: '已購客進度', maintenance: '維修通報' }[type];
-            return `<button onclick="edit${type[0].toUpperCase() + type.slice(1)}('${row.id}')" class="px-2 py-1 text-xs rounded bg-indigo-50 text-indigo-700">編輯</button><button onclick="deleteOwnedRecord('${type}','${row.id}','${title}')" class="px-2 py-1 text-xs rounded bg-red-50 text-red-700">刪除</button>`;
+            return `<button ${crmActionAttributes({ appointment: 'editAppointment', task: 'editTask', maintenance: 'editMaintenance' }[type], row.id)} class="px-2 py-1 text-xs rounded bg-indigo-50 text-indigo-700">編輯</button><button ${crmActionAttributes('deleteOwnedRecord', type,row.id,title)} class="px-2 py-1 text-xs rounded bg-red-50 text-red-700">刪除</button>`;
         }
 
         async function deleteOwnedRecord(type, id, title) {
@@ -2845,7 +2857,7 @@
 
         function photoButton(row, module) {
             const count = parsePhotoRefs(row).length;
-            return count ? `<button onclick="openPrivatePhotos('${module}','${row.id}')" class="px-2 py-1 text-xs rounded bg-amber-50 text-amber-800"><i class="fas fa-images mr-1"></i>照片 ${count}</button>` : '';
+            return count ? `<button ${crmActionAttributes('openPrivatePhotos', module,row.id)} class="px-2 py-1 text-xs rounded bg-amber-50 text-amber-800"><i class="fas fa-images mr-1"></i>照片 ${count}</button>` : '';
         }
 
         async function openPrivatePhotos(module, id) {
@@ -2925,7 +2937,7 @@
                 const chips = rows.map(row => `
                     <div class="leave-chip" style="color:${staffColors[String(row.人員 || '').trim()].text};background:${staffColors[String(row.人員 || '').trim()].background}">
                         <span>${escapeHtml(row.人員)}・${escapeHtml(row.狀態)}</span>
-                        ${canEditOwnedRecord(row) ? `<button type="button" class="leave-remove" aria-label="取消${escapeHtml(row.人員)}休假" onclick="deleteScheduleEntry('${row.id}')">×</button>` : ''}
+                        ${canEditOwnedRecord(row) ? `<button type="button" class="leave-remove" aria-label="取消${escapeHtml(row.人員)}休假" ${crmActionAttributes('deleteScheduleEntry', row.id)}>×</button>` : ''}
                     </div>`).join('');
                 html += `
                     <div class="calendar-day ${weekday === 0 || weekday === 6 ? 'weekend' : ''} ${dateKey === today ? 'today' : ''}">
@@ -2972,6 +2984,62 @@
         function formatDateKey(date) {
             return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
         }
+
+        // Arguments from records are data, never JavaScript source code.
+        function crmActionAttributes(action, ...args) {
+            return `data-crm-action="${escapeHtml(action)}" data-crm-args="${escapeHtml(JSON.stringify(args))}"`;
+        }
+
+        function crmSubmitAttributes(action, ...args) {
+            return `data-crm-submit="${escapeHtml(action)}" data-crm-args="${escapeHtml(JSON.stringify(args))}"`;
+        }
+
+        async function copyInviteCode(code) {
+            await navigator.clipboard.writeText(String(code));
+            alert('邀請碼已複製');
+        }
+
+        function dispatchCrmDataAction(event, attribute, handlers, withEvent) {
+            const element = event.target.closest('[' + attribute + ']');
+            if (!element || element.disabled) return;
+            const action = element.getAttribute(attribute);
+            if (!Object.prototype.hasOwnProperty.call(handlers, action)) return;
+            event.preventDefault();
+            try {
+                const args = JSON.parse(element.dataset.crmArgs || '[]');
+                if (!Array.isArray(args)) return;
+                const result = handlers[action](...(withEvent ? [event, ...args] : args));
+                Promise.resolve(result).catch(() => alert('操作未完成，請稍後重試。'));
+            } catch (_) { alert('操作資料無效，請重新載入。'); }
+        }
+
+        document.addEventListener('click', event => dispatchCrmDataAction(event, 'data-crm-action', {
+            completeMaintenance,
+            copyInviteCode,
+            deleteCustomerRecord,
+            deleteOwnedRecord,
+            deleteScheduleEntry,
+            editAppointment,
+            editCustomer,
+            editMaintenance,
+            editTask,
+            editUser,
+            exportMaintenanceReport,
+            manageUserStatus,
+            openCancelEditor,
+            openCustomerTimeline,
+            openDealEditor,
+            openFollowUpEditor,
+            openPrivatePhotos,
+            quickProgress,
+            removeUser,
+            saveTaskStage,
+            setPriceMenuUnit,
+            setTeamStaff
+        }, false));
+        document.addEventListener('submit', event => dispatchCrmDataAction(event, 'data-crm-submit', {
+            submitDealEditor, submitCancelEditor, submitFollowUp
+        }, true));
 
         function escapeHtml(value) {
             return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
