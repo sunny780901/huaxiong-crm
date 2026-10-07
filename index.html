@@ -1518,6 +1518,22 @@
             }
         }
 
+        function countTodayAppointments(appointments, now = new Date()) {
+            const parts = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Taipei', calendar: 'gregory', numberingSystem: 'latn',
+                year: 'numeric', month: '2-digit', day: '2-digit'
+            }).formatToParts(now);
+            const part = type => parts.find(value => value.type === type).value;
+            const today = `${part('year')}-${part('month')}-${part('day')}`;
+            return (Array.isArray(appointments) ? appointments : []).filter(row => {
+                if (!row || String(row.狀態 || '').trim() === '爽約取消') return false;
+                const date = String(row.預約日期 || '').trim();
+                // Appointment fields are calendar dates, not instants or creation timestamps.
+                return /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(date) &&
+                    appointmentDateKey(date) === today;
+            }).length;
+        }
+
         function initAppUI() {
             if (!Array.isArray(appData.teamCustomers)) appData.teamCustomers = appData.customers || [];
             if (!Array.isArray(appData.followUps)) appData.followUps = [];
@@ -1526,7 +1542,7 @@
 
             // 更新儀表板統計
             document.getElementById('stat-total-customers').innerText = appData.customers.length;
-            document.getElementById('stat-today-appointments').innerText = appData.appointments.filter(a => a.狀態 === '待到訪').length;
+            document.getElementById('stat-today-appointments').innerText = countTodayAppointments(appData.appointments);
             document.getElementById('stat-pending-tasks').innerText = appData.tasks.filter(t => t.狀態 === '待辦').length;
             document.getElementById('stat-closed-deals').innerText = appData.customers.filter(c => c.成交狀態 === '正式成交').length;
             document.getElementById('welcome-title').innerText = `你好，${currentUser.name || '夥伴'}`;
@@ -1818,7 +1834,7 @@
 
         function renderChangedModule(collection) {
             if (collection === 'appointments') {
-                document.getElementById('stat-today-appointments').innerText = (appData.appointments || []).filter(a => a.狀態 === '待到訪').length;
+                document.getElementById('stat-today-appointments').innerText = countTodayAppointments(appData.appointments);
                 renderAppointmentsList();
             } else if (collection === 'tasks') {
                 document.getElementById('stat-pending-tasks').innerText = (appData.tasks || []).filter(t => t.狀態 === '待辦').length;
