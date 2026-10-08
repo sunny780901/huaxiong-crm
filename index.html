@@ -362,7 +362,7 @@
                     <!-- 快速統計摘要 -->
                     <div class="stats-grid grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
                         <div class="bg-white p-4 rounded-xl shadow-xs border border-gold-100">
-                            <p class="text-xs text-gray-500">總客戶數</p>
+                            <p class="text-xs text-gray-500" title="依本月訪客日期統計">本月客戶數</p>
                             <p class="text-2xl font-bold text-gold-700 mt-1" id="stat-total-customers">0</p>
                         </div>
                         <div class="bg-white p-4 rounded-xl shadow-xs border border-gold-100">
@@ -370,11 +370,11 @@
                             <p class="text-2xl font-bold text-gold-700 mt-1" id="stat-today-appointments">0</p>
                         </div>
                         <div class="bg-white p-4 rounded-xl shadow-xs border border-gold-100">
-                            <p class="text-xs text-gray-500">已購客進度</p>
+                            <p class="text-xs text-gray-500" title="依已購客進度清單計算，交屋完成後移出，不限月份">進行中客戶（組）</p>
                             <p class="text-2xl font-bold text-gold-700 mt-1" id="stat-pending-tasks">0</p>
                         </div>
                         <div class="bg-white p-4 rounded-xl shadow-xs border border-gold-100">
-                            <p class="text-xs text-gray-500">成交戶數</p>
+                            <p class="text-xs text-gray-500" title="依本月成交日期統計正式成交">本月成交戶數</p>
                             <p class="text-2xl font-bold text-gold-700 mt-1" id="stat-closed-deals">0</p>
                         </div>
                     </div>
@@ -1534,6 +1534,35 @@
             }).length;
         }
 
+        function dashboardMonthKey(now = new Date()) {
+            const parts = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Taipei', calendar: 'gregory', numberingSystem: 'latn',
+                year: 'numeric', month: '2-digit'
+            }).formatToParts(now);
+            const part = type => parts.find(value => value.type === type).value;
+            return `${part('year')}-${part('month')}`;
+        }
+
+        function countMonthlyCustomers(customers, now = new Date()) {
+            const month = dashboardMonthKey(now);
+            return (Array.isArray(customers) ? customers : []).filter(row =>
+                row && appointmentDateKey(String(row.訪客日期 || '').trim()).slice(0, 7) === month
+            ).length;
+        }
+
+        function countMonthlyDeals(customers, now = new Date()) {
+            const month = dashboardMonthKey(now);
+            return (Array.isArray(customers) ? customers : []).filter(row =>
+                row && String(row.成交狀態 || '').trim() === '正式成交' &&
+                appointmentDateKey(String(row.成交日期 || '').trim()).slice(0, 7) === month
+            ).length;
+        }
+
+        function updateMonthlyCustomerStats(now = new Date()) {
+            document.getElementById('stat-total-customers').innerText = countMonthlyCustomers(appData.customers, now);
+            document.getElementById('stat-closed-deals').innerText = countMonthlyDeals(appData.customers, now);
+        }
+
         function initAppUI() {
             if (!Array.isArray(appData.teamCustomers)) appData.teamCustomers = appData.customers || [];
             if (!Array.isArray(appData.followUps)) appData.followUps = [];
@@ -1541,10 +1570,9 @@
             document.getElementById('app-container').classList.remove('hidden');
 
             // 更新儀表板統計
-            document.getElementById('stat-total-customers').innerText = appData.customers.length;
+            updateMonthlyCustomerStats();
             document.getElementById('stat-today-appointments').innerText = countTodayAppointments(appData.appointments);
-            document.getElementById('stat-pending-tasks').innerText = appData.tasks.filter(t => t.狀態 === '待辦').length;
-            document.getElementById('stat-closed-deals').innerText = appData.customers.filter(c => c.成交狀態 === '正式成交').length;
+            document.getElementById('stat-pending-tasks').innerText = getActiveTaskGroups(appData.tasks).length;
             document.getElementById('welcome-title').innerText = `你好，${currentUser.name || '夥伴'}`;
 
             applyRolePermissions();
@@ -1798,8 +1826,7 @@
             };
             appData.customers = mergeInto(appData.customers);
             appData.teamCustomers = mergeInto(appData.teamCustomers);
-            document.getElementById('stat-total-customers').innerText = appData.customers.length;
-            document.getElementById('stat-closed-deals').innerText = appData.customers.filter(c => c.成交狀態 === '正式成交').length;
+            updateMonthlyCustomerStats();
             renderCustomerList();
             renderTeamOverview();
             renderSalesReports();
@@ -1809,8 +1836,7 @@
             const targetId = String(id);
             appData.customers = (appData.customers || []).filter(item => String(item.id) !== targetId);
             appData.teamCustomers = (appData.teamCustomers || []).filter(item => String(item.id) !== targetId);
-            document.getElementById('stat-total-customers').innerText = appData.customers.length;
-            document.getElementById('stat-closed-deals').innerText = appData.customers.filter(c => c.成交狀態 === '正式成交').length;
+            updateMonthlyCustomerStats();
             renderCustomerList();
             renderTeamOverview();
             renderSalesReports();
@@ -1837,7 +1863,7 @@
                 document.getElementById('stat-today-appointments').innerText = countTodayAppointments(appData.appointments);
                 renderAppointmentsList();
             } else if (collection === 'tasks') {
-                document.getElementById('stat-pending-tasks').innerText = (appData.tasks || []).filter(t => t.狀態 === '待辦').length;
+                document.getElementById('stat-pending-tasks').innerText = getActiveTaskGroups(appData.tasks).length;
                 renderTasksList();
             } else if (collection === 'maintenance') {
                 renderMaintenanceList();
@@ -2479,11 +2505,10 @@
             return TASK_STAGES.reduce((score, stage) => score + (String(task?.[`${stage}完成時間`] || '').trim() ? 1 : 0), 0);
         }
 
-        function renderTasksList() {
-            const container = document.getElementById('tasks-list-container');
+        function getActiveTaskGroups(tasks) {
             const activeTasksByUnit = new Map();
             const activeTasksWithoutUnit = [];
-            (appData.tasks || []).filter(task => !isTaskCompleted(task)).forEach(task => {
+            (Array.isArray(tasks) ? tasks : []).filter(task => task && !isTaskCompleted(task)).forEach(task => {
                 const unitKey = normalizeTaskUnitKey(task.戶別樓層);
                 if (!unitKey) {
                     activeTasksWithoutUnit.push(task);
@@ -2494,7 +2519,12 @@
                     activeTasksByUnit.set(unitKey, task);
                 }
             });
-            const activeTasks = [...activeTasksByUnit.values(), ...activeTasksWithoutUnit];
+            return [...activeTasksByUnit.values(), ...activeTasksWithoutUnit];
+        }
+
+        function renderTasksList() {
+            const container = document.getElementById('tasks-list-container');
+            const activeTasks = getActiveTaskGroups(appData.tasks);
             if (activeTasks.length === 0) {
                 container.innerHTML = '<p class="text-center text-gray-500 py-4 text-sm">目前無已購客進度</p>';
                 return;
