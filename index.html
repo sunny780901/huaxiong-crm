@@ -1204,6 +1204,7 @@
         let priceEditorState = null;
         let priceMenuRequestSequence = 0;
         let priceSaveInFlight = null;
+        let priceReloadInFlight = false;
         let priceHistoryLoading = false;
         let maintenancePdfExport = null;
         const pendingApiRequests = new Set();
@@ -1758,9 +1759,10 @@
             document.getElementById('price-entry-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
 
-        function applyPriceMenuResponse(menu, requestId) {
-            if (requestId !== priceMenuRequestSequence || !Number.isInteger(menu?.version)
-                || menu.version < appData.priceMenu.version) return false;
+        function applyPriceMenuResponse(menu, requestId, acceptNewer = false) {
+            if (!Number.isInteger(menu?.version) || menu.version < appData.priceMenu.version
+                || (requestId !== priceMenuRequestSequence
+                    && (!acceptNewer || menu.version <= appData.priceMenu.version))) return false;
             appData.priceMenu = menu;
             return true;
         }
@@ -1775,14 +1777,19 @@
             priceSaveInFlight = state;
             const button = document.getElementById('price-entry-save');
             const error = document.getElementById('price-entry-error');
+            const failure = {};
             button.disabled = true;
             button.textContent = '儲存中…';
             error.classList.add('hidden');
             try {
-                const result = await apiPost('savePriceEntry', { ...state, entry }, null, true);
-                if (priceEditorState !== state || requestId !== priceMenuRequestSequence) return;
+                const result = await apiPost('savePriceEntry', { ...state, entry }, null, true, failure);
+                if (priceEditorState !== state || requestId !== priceMenuRequestSequence) {
+                    if (result?.priceMenu?.version > appData.priceMenu.version
+                        && applyPriceMenuResponse(result.priceMenu, requestId, true)) renderPriceMenu();
+                    return;
+                }
                 if (!result?.priceMenu) {
-                    error.textContent = currentUser.lastErrorMessage || '未完成儲存，請保持連線後再試。';
+                    error.textContent = failure.message || '未完成儲存，請保持連線後再試。';
                     error.classList.remove('hidden');
                     return;
                 }
@@ -1800,16 +1807,22 @@
         }
 
         async function reloadPriceMenu() {
-            if (!canManagePrices()) return;
+            if (!canManagePrices() || priceReloadInFlight) return;
             const state = priceEditorState;
             const requestId = ++priceMenuRequestSequence;
-            const result = await apiPost('getPriceMenu', {}, null, true);
-            if (priceEditorState !== state || requestId !== priceMenuRequestSequence) return;
-            if (!result?.priceMenu) { alert(currentUser.lastErrorMessage || '價目載入失敗，請稍後再試。'); return; }
-            if (!applyPriceMenuResponse(result.priceMenu, requestId)) return;
-            closePriceEditor();
-            renderPriceMenu();
-            showSaveToast('已載入最新價目');
+            const failure = {};
+            priceReloadInFlight = true;
+            try {
+                const result = await apiPost('getPriceMenu', {}, null, true, failure);
+                if (priceEditorState !== state || requestId !== priceMenuRequestSequence) return;
+                if (!result?.priceMenu) { alert(failure.message || '價目載入失敗，請稍後再試。'); return; }
+                if (!applyPriceMenuResponse(result.priceMenu, requestId)) return;
+                closePriceEditor();
+                renderPriceMenu();
+                showSaveToast('已載入最新價目');
+            } finally {
+                priceReloadInFlight = false;
+            }
         }
 
         function priceHistoryDescription(row, category) {
@@ -1863,7 +1876,7 @@
         }
 
         // 通用 API 請求方法
-        async function apiPost(action, data, id = null, suppressAlert = false) {
+        async function apiPost(action, data, id = null, suppressAlert = false, failure = null) {
             if (SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL') {
                 alert('尚未設定 SCRIPT_URL，無法寫入資料！');
                 return null;
@@ -1879,6 +1892,7 @@
             const requestKey = `${action}:${id || ''}:${JSON.stringify(data || {})}`;
             if (pendingApiRequests.has(requestKey)) return null;
             pendingApiRequests.add(requestKey);
+            let requestErrorMessage = '';
             try {
                 const response = await fetch(SCRIPT_URL, {
                     method: 'POST',
@@ -1901,10 +1915,11 @@
                     return result.data;
                 } else {
                     currentUser.lastErrorCode = result.code || 'REQUEST_FAILED';
-                    currentUser.lastErrorMessage = result.message || '操作失敗';
+                    currentUser.lastErrorMessage = requestErrorMessage = result.message || '操作失敗';
                     throw new Error(result.message);
                 }
             } catch (err) {
+                if (failure) failure.message = requestErrorMessage || err.message || '網路連線失敗';
                 currentUser.lastErrorMessage = currentUser.lastErrorMessage || err.message || '網路連線失敗';
                 if (!suppressAlert) alert('操作失敗: ' + err.message);
                 return null;
