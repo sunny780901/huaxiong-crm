@@ -5,39 +5,17 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>華雄天地 CRM 系統</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        gold: {
-                            50: '#fdfbf7',
-                            100: '#f9f3e6',
-                            200: '#f2e4c2',
-                            300: '#e5cc93',
-                            400: '#d4b063',
-                            500: '#c59b3f',
-                            600: '#a87f31',
-                            700: '#876327',
-                            800: '#6c4f22',
-                            900: '#58411f',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- Compiled from the locked Tailwind dependency. -->
+    <link rel="stylesheet" href="assets/crm.css">
     <!-- FontAwesome CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
     <!-- PDF export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- LINE LIFF SDK -->
-    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.31.1/sdk.js"></script>
     <style>
         :root {
             --navy: #10233f;
@@ -1078,6 +1056,23 @@
                     <p id="price-menu-summary" class="text-sm font-bold text-gray-700"></p>
                     <button type="button" onclick="clearPriceMenuFilters()" class="text-xs font-bold text-gold-700">清除篩選</button>
                 </div>
+                <div id="price-manager-tools" class="hidden rounded-2xl border border-gold-200 bg-white p-4 space-y-4">
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="openPriceEditor()" class="rounded-lg bg-gold-600 px-4 py-2 text-sm font-bold text-white">新增價目</button>
+                        <button type="button" onclick="loadPriceHistory()" class="rounded-lg border border-gold-200 px-4 py-2 text-sm font-bold text-gold-700">修改紀錄</button>
+                        <button type="button" onclick="reloadPriceMenu()" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-600">重新載入價目</button>
+                    </div>
+                    <form id="price-entry-form" onsubmit="submitPriceEditor(event)" class="hidden space-y-4">
+                        <h3 id="price-entry-title" class="font-bold text-gray-800">新增價目</h3>
+                        <div id="price-entry-fields" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+                        <p id="price-entry-error" role="alert" class="hidden text-sm text-red-700"></p>
+                        <div class="flex gap-2">
+                            <button id="price-entry-save" type="submit" class="rounded-lg bg-gold-600 px-4 py-2 text-sm font-bold text-white">儲存價目</button>
+                            <button type="button" onclick="closePriceEditor()" class="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600">取消</button>
+                        </div>
+                    </form>
+                    <div id="price-history-list" class="hidden space-y-3" aria-live="polite"></div>
+                </div>
                 <div id="price-menu-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
             </section>
 
@@ -1206,6 +1201,8 @@
         let heatmapRequestSerial = 0;
         let activePriceMenuTab = 'houses';
         let activePriceUnit = 'all';
+        let priceEditorState = null;
+        let priceHistoryLoading = false;
         let maintenancePdfExport = null;
         const pendingApiRequests = new Set();
         const PUBLIC_PRICE_EXTRAS = Object.freeze({
@@ -1621,6 +1618,7 @@
         }
 
         function setPriceMenuTab(tab) {
+            closePriceEditor();
             activePriceMenuTab = ['houses', 'showcase', 'copy', 'options', 'parking'].includes(tab) ? tab : 'houses';
             activePriceUnit = 'all';
             const search = document.getElementById('price-menu-search');
@@ -1681,6 +1679,7 @@
             document.getElementById('price-menu-updated').textContent = menu.updatedAt ? `資料版本：${menu.updatedAt}` : '';
             const summaryLabel = { houses: '房屋表價', showcase: '實品屋價格', copy: 'COPY價格', options: '選配產品價格', parking: '車位表價' }[activePriceMenuTab];
             document.getElementById('price-menu-summary').textContent = `${summaryLabel}｜${filtered.length}${activePriceMenuTab === 'options' ? ' 項' : activePriceMenuTab === 'parking' ? ' 種' : ' 戶'}`;
+            document.getElementById('price-manager-tools').classList.toggle('hidden', !canManagePrices());
 
             if (!filtered.length) {
                 container.innerHTML = '<div class="sm:col-span-2 rounded-2xl border border-dashed border-gold-200 bg-white px-4 py-10 text-center text-sm text-gray-500">找不到符合的價目，請調整搜尋條件。</div>';
@@ -1696,10 +1695,12 @@
                         <div><p class="text-xs text-gray-500">${activePriceMenuTab === 'showcase' ? '實品屋價格' : activePriceMenuTab === 'copy' ? 'COPY價格' : '房屋公開表價'}</p><p class="mt-1 text-3xl font-black text-gold-700">${Number(row.price).toLocaleString('zh-TW')}<span class="ml-1 text-sm">萬</span></p></div>
                         <i class="fas fa-building text-3xl text-gold-200"></i>
                     </div>
+                    ${priceEntryManagementMarkup(row)}
                 </article>` : activePriceMenuTab === 'options' ? `
                 <article class="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-sm">
                     <div class="flex items-center justify-between bg-gradient-to-r from-emerald-800 to-teal-700 px-4 py-3 text-white"><h3 class="text-lg font-black">${escapeHtml(row.item)}</h3><i class="fas fa-screwdriver-wrench text-xl text-emerald-200"></i></div>
                     <div class="p-4"><p class="text-3xl font-black text-emerald-700">${escapeHtml(row.price)}<span class="ml-1 text-sm">萬元</span></p>${row.note ? `<p class="mt-3 text-xs leading-6 text-gray-600">${escapeHtml(row.note)}</p>` : ''}</div>
+                    ${priceEntryManagementMarkup(row)}
                 </article>` : `
                 <article class="rounded-2xl border border-amber-200 bg-gradient-to-br from-white to-amber-50 p-4 shadow-sm">
                     <div class="flex items-start justify-between gap-3">
@@ -1707,7 +1708,107 @@
                         <i class="fas fa-square-parking text-3xl text-amber-500"></i>
                     </div>
                     <div class="mt-4 border-t border-amber-200 pt-3"><p class="text-xs text-gray-500">車位公開表價</p><p class="mt-1 text-3xl font-black text-amber-700">${Number(row.price).toLocaleString('zh-TW')}<span class="ml-1 text-sm">萬</span></p></div>
+                    ${priceEntryManagementMarkup(row)}
                 </article>`).join('');
+        }
+
+        function canManagePrices() {
+            return currentUser.role === '專案經理' && currentUser.permissions?.managePrices === true
+                && currentUser.permissions?.modules?.priceMenu === true
+                && Number.isInteger(appData.priceMenu?.version);
+        }
+
+        function priceEntryManagementMarkup(row) {
+            return canManagePrices() && row.id ? `<div class="border-t border-gray-100 px-4 py-3 text-right"><button type="button" ${crmActionAttributes('openPriceEditor', row.id)} class="rounded-lg border border-gold-200 px-3 py-2 text-xs font-bold text-gold-700">編輯價目</button></div>` : '';
+        }
+
+        function closePriceEditor() {
+            priceEditorState = null;
+            document.getElementById('price-entry-form')?.classList.add('hidden');
+        }
+
+        function openPriceEditor(id = '') {
+            if (!canManagePrices()) return;
+            const category = activePriceMenuTab;
+            const row = id ? appData.priceMenu[category].find(entry => entry.id === id) : null;
+            if (id && !row) { alert('找不到價目，請重新載入。'); return; }
+            const titles = { houses: '房屋表價', showcase: '實品屋價格', copy: 'COPY價格', options: '選配產品價格', parking: '車位價格' };
+            const fields = category === 'options' ? [['item', '產品名稱', 'text', true], ['note', '內容說明', 'textarea', false]]
+                : category === 'parking' ? [['unit', '車位區', 'text', true], ['type', '車位類型', 'text', true], ['area', '坪數', 'text', false], ['size', '車位尺寸', 'text', true]]
+                : [['unit', '戶別，例如 B6', 'text', true], ['floor', '樓層', 'number', true], ['area', '坪數（未知可填 -）', 'text', false]];
+            fields.push(['price', '價格（萬）', 'number', true]);
+            priceEditorState = { id, category, baseVersion: appData.priceMenu.version,
+                requestKey: window.crypto?.randomUUID?.() || `price-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+            document.getElementById('price-entry-title').textContent = `${id ? '編輯' : '新增'}${titles[category]}`;
+            document.getElementById('price-entry-fields').innerHTML = fields.map(([name, label, type, required]) => {
+                const value = row?.[name] ?? (name === 'area' ? '-' : '');
+                const inputClass = 'mt-1 w-full rounded-xl border border-gray-200 px-3 py-3 text-base text-gray-800';
+                return `<label class="text-sm font-medium text-gray-700">${escapeHtml(label)}${type === 'textarea'
+                    ? `<textarea name="${name}" maxlength="2000" rows="3" class="${inputClass}">${escapeHtml(value)}</textarea>`
+                    : `<input name="${name}" type="${type}" ${required ? 'required' : ''} ${type === 'number' ? `inputmode="${name === 'price' ? 'decimal' : 'numeric'}" min="${name === 'price' ? '0.01' : '1'}" max="${name === 'price' ? '100000000' : '100'}" step="${name === 'price' ? '0.01' : '1'}"` : 'maxlength="60"'} value="${escapeHtml(value)}" class="${inputClass}">`}</label>`;
+            }).join('');
+            document.getElementById('price-entry-error').classList.add('hidden');
+            document.getElementById('price-entry-form').classList.remove('hidden');
+            document.getElementById('price-history-list').classList.add('hidden');
+            document.getElementById('price-entry-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        async function submitPriceEditor(event) {
+            event.preventDefault();
+            if (!canManagePrices() || !priceEditorState) return;
+            const state = { ...priceEditorState };
+            const entry = Object.fromEntries(new FormData(event.target).entries());
+            const button = document.getElementById('price-entry-save');
+            const error = document.getElementById('price-entry-error');
+            button.disabled = true;
+            button.textContent = '儲存中…';
+            error.classList.add('hidden');
+            try {
+                const result = await apiPost('savePriceEntry', { ...state, entry }, null, true);
+                if (!result?.priceMenu) {
+                    error.textContent = currentUser.lastErrorMessage || '未完成儲存，請保持連線後再試。';
+                    error.classList.remove('hidden');
+                    return;
+                }
+                appData.priceMenu = result.priceMenu;
+                closePriceEditor();
+                renderPriceMenu();
+                showSaveToast(result.unchanged ? '價目內容未變更' : '價目已儲存，修改紀錄已保留');
+            } finally {
+                button.disabled = false;
+                button.textContent = '儲存價目';
+            }
+        }
+
+        async function reloadPriceMenu() {
+            if (!canManagePrices()) return;
+            const result = await apiPost('getPriceMenu', {}, null, true);
+            if (!result?.priceMenu) { alert(currentUser.lastErrorMessage || '價目載入失敗，請稍後再試。'); return; }
+            appData.priceMenu = result.priceMenu;
+            closePriceEditor();
+            renderPriceMenu();
+            showSaveToast('已載入最新價目');
+        }
+
+        function priceHistoryDescription(row, category) {
+            if (!row) return '尚無此價目';
+            const label = category === 'options' ? row.item : category === 'parking'
+                ? `${row.unit} ${row.type} ${row.size}` : `${row.unit}-${row.floor}F`;
+            const fields = category === 'options' ? ['note'] : category === 'parking' ? ['area'] : ['area'];
+            return `${label}｜${Number(row.price).toLocaleString('zh-TW')} 萬${fields.map(key => row[key] && row[key] !== '-' ? `｜${row[key]}` : '').join('')}`;
+        }
+
+        async function loadPriceHistory() {
+            if (!canManagePrices() || priceHistoryLoading) return;
+            priceHistoryLoading = true;
+            const container = document.getElementById('price-history-list');
+            container.classList.remove('hidden');
+            container.textContent = '正在載入修改紀錄…';
+            try {
+                const result = await apiPost('getPriceHistory', {}, null, true);
+                if (!result) { container.textContent = currentUser.lastErrorMessage || '紀錄載入失敗。'; return; }
+                container.innerHTML = result.entries?.length ? result.entries.map(record => `<article class="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm space-y-1"><p class="font-bold text-gray-800">${escapeHtml(record.operation)}｜${escapeHtml(record.time)}｜${escapeHtml(record.actor)}</p><p class="text-gray-500">修改前：${escapeHtml(priceHistoryDescription(record.before, record.category))}</p><p class="text-gold-700">修改後：${escapeHtml(priceHistoryDescription(record.after, record.category))}</p></article>`).join('') : '<p class="text-sm text-gray-500">目前尚無價目修改紀錄。</p>';
+            } finally { priceHistoryLoading = false; }
         }
 
         function getRegistrationStaffNames() {
@@ -1919,6 +2020,7 @@
             if (!form) return;
             form.reset(); form.elements.id.value = '';
             document.getElementById('customer-submit').innerText = '儲存客戶資料';
+            document.getElementById('customer-submit').disabled = false;
         }
 
         async function deleteCustomerRecord(id) {
@@ -3109,6 +3211,7 @@
             removeUser,
             saveTaskStage,
             setPriceMenuUnit,
+            openPriceEditor,
             setTeamStaff
         }, false));
         document.addEventListener('submit', event => dispatchCrmDataAction(event, 'data-crm-submit', {
