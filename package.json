@@ -1,0 +1,14 @@
+{
+  "name": "huaxiong-crm",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.cjs && node scripts/regression.mjs",
+    "check": "pnpm build && pnpm test && git diff --exit-code -- assets/crm.css"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}
