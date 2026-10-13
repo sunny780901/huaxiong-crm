@@ -1202,6 +1202,8 @@
         let activePriceMenuTab = 'houses';
         let activePriceUnit = 'all';
         let priceEditorState = null;
+        let priceMenuRequestSequence = 0;
+        let priceSaveInFlight = null;
         let priceHistoryLoading = false;
         let maintenancePdfExport = null;
         const pendingApiRequests = new Set();
@@ -1748,16 +1750,29 @@
                     : `<input name="${name}" type="${type}" ${required ? 'required' : ''} ${type === 'number' ? `inputmode="${name === 'price' ? 'decimal' : 'numeric'}" min="${name === 'price' ? '0.01' : '1'}" max="${name === 'price' ? '100000000' : '100'}" step="${name === 'price' ? '0.01' : '1'}"` : 'maxlength="60"'} value="${escapeHtml(value)}" class="${inputClass}">`}</label>`;
             }).join('');
             document.getElementById('price-entry-error').classList.add('hidden');
+            const saveButton = document.getElementById('price-entry-save');
+            saveButton.disabled = false;
+            saveButton.textContent = '儲存價目';
             document.getElementById('price-entry-form').classList.remove('hidden');
             document.getElementById('price-history-list').classList.add('hidden');
             document.getElementById('price-entry-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
 
+        function applyPriceMenuResponse(menu, requestId) {
+            if (requestId !== priceMenuRequestSequence || !Number.isInteger(menu?.version)
+                || menu.version < appData.priceMenu.version) return false;
+            appData.priceMenu = menu;
+            return true;
+        }
+
         async function submitPriceEditor(event) {
             event.preventDefault();
             if (!canManagePrices() || !priceEditorState) return;
-            const state = { ...priceEditorState };
+            const state = priceEditorState;
+            if (priceSaveInFlight === state) return;
             const entry = Object.fromEntries(new FormData(event.target).entries());
+            const requestId = ++priceMenuRequestSequence;
+            priceSaveInFlight = state;
             const button = document.getElementById('price-entry-save');
             const error = document.getElementById('price-entry-error');
             button.disabled = true;
@@ -1765,26 +1780,33 @@
             error.classList.add('hidden');
             try {
                 const result = await apiPost('savePriceEntry', { ...state, entry }, null, true);
+                if (priceEditorState !== state || requestId !== priceMenuRequestSequence) return;
                 if (!result?.priceMenu) {
                     error.textContent = currentUser.lastErrorMessage || '未完成儲存，請保持連線後再試。';
                     error.classList.remove('hidden');
                     return;
                 }
-                appData.priceMenu = result.priceMenu;
+                if (!applyPriceMenuResponse(result.priceMenu, requestId)) return;
                 closePriceEditor();
                 renderPriceMenu();
                 showSaveToast(result.unchanged ? '價目內容未變更' : '價目已儲存，修改紀錄已保留');
             } finally {
-                button.disabled = false;
-                button.textContent = '儲存價目';
+                if (priceSaveInFlight === state) priceSaveInFlight = null;
+                if (!priceEditorState || priceEditorState === state) {
+                    button.disabled = false;
+                    button.textContent = '儲存價目';
+                }
             }
         }
 
         async function reloadPriceMenu() {
             if (!canManagePrices()) return;
+            const state = priceEditorState;
+            const requestId = ++priceMenuRequestSequence;
             const result = await apiPost('getPriceMenu', {}, null, true);
+            if (priceEditorState !== state || requestId !== priceMenuRequestSequence) return;
             if (!result?.priceMenu) { alert(currentUser.lastErrorMessage || '價目載入失敗，請稍後再試。'); return; }
-            appData.priceMenu = result.priceMenu;
+            if (!applyPriceMenuResponse(result.priceMenu, requestId)) return;
             closePriceEditor();
             renderPriceMenu();
             showSaveToast('已載入最新價目');

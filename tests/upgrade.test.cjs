@@ -110,3 +110,140 @@ test('successful customer creation unlocks the same save button for the next edi
   assert.equal(document.getElementById('customer-submit').disabled, false);
   assert.equal(form.elements.id.value, '');
 });
+
+function delayedPriceHarness() {
+  const h = harness(), requests = [], toasts = [], alerts = [];
+  h.run("appData.priceMenu.copy.push({id:'second-test',unit:'B1',floor:2,area:'-',price:200})");
+  h.c.apiPost = (action, data) => new Promise((resolve, reject) => requests.push({ action, data, resolve, reject }));
+  h.c.showSaveToast = message => toasts.push(message);
+  h.c.alert = message => alerts.push(message);
+  return { ...h, requests, toasts, alerts };
+}
+function priceReply(version, price = 101) {
+  return { priceMenu: { copy: [{id:'base-test',unit:'B6',floor:4,area:'-',price}, {id:'second-test',unit:'B1',floor:2,area:'-',price:200}], houses:[], showcase:[], parking:[], options:[], version } };
+}
+function priceSubmit(c, price = '101') {
+  return c.submitPriceEditor({ preventDefault() {}, target: { fields: { unit:'B6',floor:'4',area:'-',price } } });
+}
+
+test('late save success cannot replace the menu or close a newly opened editor', async () => {
+  const { c, document, run, requests, toasts } = delayedPriceHarness();
+  c.openPriceEditor('base-test'); const saving = priceSubmit(c);
+  c.openPriceEditor('second-test');
+  document.getElementById('price-entry-fields').innerHTML = 'unsaved second editor';
+  assert.equal(document.getElementById('price-entry-save').disabled, false);
+  requests[0].resolve(priceReply(1)); await saving;
+  assert.equal(run('appData.priceMenu.version'), 0);
+  assert.equal(run('priceEditorState.id'), 'second-test');
+  assert.equal(document.getElementById('price-entry-fields').innerHTML, 'unsaved second editor');
+  assert.equal(document.getElementById('price-entry-form').classList.contains('hidden'), false);
+  assert.deepEqual(toasts, []);
+});
+
+for (const outcome of ['success', 'failure', 'rejection']) {
+  test(`old save ${outcome} cannot change a newer pending editor or unlock its save button`, async () => {
+    const { c, document, run, requests } = delayedPriceHarness();
+    c.openPriceEditor('base-test'); const first = priceSubmit(c);
+    c.openPriceEditor('second-test'); const second = priceSubmit(c, '201');
+    document.getElementById('price-entry-fields').innerHTML = 'new pending editor';
+    if (outcome === 'rejection') { requests[0].reject(new Error('isolated failure')); await assert.rejects(first, /isolated failure/); }
+    else { run("currentUser.lastErrorMessage='old save error'"); requests[0].resolve(outcome === 'success' ? priceReply(1) : null); await first; }
+    assert.equal(run('priceEditorState.id'), 'second-test');
+    assert.equal(run('appData.priceMenu.version'), 0);
+    assert.equal(document.getElementById('price-entry-fields').innerHTML, 'new pending editor');
+    assert.equal(document.getElementById('price-entry-error').classList.contains('hidden'), true);
+    assert.equal(document.getElementById('price-entry-save').disabled, true);
+    requests[1].resolve(priceReply(2, 202)); await second;
+    assert.equal(run('appData.priceMenu.version'), 2);
+    assert.equal(run('priceEditorState'), null);
+  });
+}
+
+test('out-of-order saves cannot roll the menu back after the newer save completes', async () => {
+  const { c, run, requests } = delayedPriceHarness();
+  c.openPriceEditor('base-test'); const first = priceSubmit(c);
+  c.openPriceEditor('second-test'); const second = priceSubmit(c, '202');
+  requests[1].resolve(priceReply(2, 202)); await second;
+  requests[0].resolve(priceReply(1, 101)); await first;
+  assert.equal(run('appData.priceMenu.version'), 2);
+  assert.equal(run('appData.priceMenu.copy[0].price'), 202);
+});
+
+test('double submit of the same editor sends only one request even with a different payload', async () => {
+  const { c, document, requests } = delayedPriceHarness();
+  c.openPriceEditor('base-test'); const first = priceSubmit(c);
+  const duplicate = priceSubmit(c, '102');
+  assert.equal(requests.length, 1);
+  await duplicate;
+  assert.equal(requests[0].data.entry.price, '101');
+  assert.equal(document.getElementById('price-entry-save').disabled, true);
+  requests[0].resolve(priceReply(1)); await first;
+});
+
+test('tab switch invalidates a pending save without applying its menu or toast', async () => {
+  const { c, run, requests, toasts } = delayedPriceHarness();
+  c.openPriceEditor('base-test'); const saving = priceSubmit(c);
+  c.setPriceMenuTab('options');
+  requests[0].resolve(priceReply(1)); await saving;
+  assert.equal(run('appData.priceMenu.version'), 0);
+  assert.equal(run('activePriceMenuTab'), 'options');
+  assert.equal(run('priceEditorState'), null);
+  assert.deepEqual(toasts, []);
+});
+
+test('late reload cannot replace the menu or close an editor opened after it started', async () => {
+  const { c, document, run, requests } = delayedPriceHarness();
+  const loading = c.reloadPriceMenu();
+  c.openPriceEditor('second-test');
+  requests[0].resolve(priceReply(1)); await loading;
+  assert.equal(run('appData.priceMenu.version'), 0);
+  assert.equal(run('priceEditorState.id'), 'second-test');
+  assert.equal(document.getElementById('price-entry-form').classList.contains('hidden'), false);
+});
+
+test('late reload failure does not alert a newly opened editor', async () => {
+  const { c, run, requests, alerts } = delayedPriceHarness();
+  const loading = c.reloadPriceMenu(); c.openPriceEditor('second-test');
+  run("currentUser.lastErrorMessage='old reload error'"); requests[0].resolve(null); await loading;
+  assert.deepEqual(alerts, []);
+  assert.equal(run('priceEditorState.id'), 'second-test');
+});
+
+test('save followed by reload retains the newer reload response', async () => {
+  const { c, run, requests } = delayedPriceHarness();
+  c.openPriceEditor('base-test'); const saving = priceSubmit(c); const loading = c.reloadPriceMenu();
+  requests[1].resolve(priceReply(2, 202)); await loading;
+  requests[0].resolve(priceReply(1)); await saving;
+  assert.equal(run('appData.priceMenu.version'), 2);
+  assert.equal(run('priceEditorState'), null);
+});
+
+test('reload followed by save cannot close or unlock the pending save', async () => {
+  const { c, document, run, requests } = delayedPriceHarness();
+  c.openPriceEditor('base-test'); const loading = c.reloadPriceMenu(); const saving = priceSubmit(c);
+  requests[0].resolve(priceReply(1)); await loading;
+  assert.equal(run('priceEditorState.id'), 'base-test');
+  assert.equal(document.getElementById('price-entry-save').disabled, true);
+  assert.equal(run('appData.priceMenu.version'), 0);
+  requests[1].resolve(priceReply(2)); await saving;
+  assert.equal(run('appData.priceMenu.version'), 2);
+});
+
+test('an older server version cannot replace an already newer menu', async () => {
+  const { c, run, requests, toasts } = delayedPriceHarness();
+  c.openPriceEditor('base-test'); const loading = c.reloadPriceMenu();
+  run('appData.priceMenu.version=3');
+  requests[0].resolve(priceReply(2)); await loading;
+  assert.equal(run('appData.priceMenu.version'), 3);
+  assert.equal(run('priceEditorState.id'), 'base-test');
+  assert.deepEqual(toasts, []);
+});
+
+test('current reload closes its own editor normally', async () => {
+  const { c, run, requests, toasts } = delayedPriceHarness();
+  c.openPriceEditor('base-test'); const loading = c.reloadPriceMenu();
+  requests[0].resolve(priceReply(1)); await loading;
+  assert.equal(run('appData.priceMenu.version'), 1);
+  assert.equal(run('priceEditorState'), null);
+  assert.equal(toasts.length, 1);
+});
