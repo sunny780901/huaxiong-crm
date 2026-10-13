@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const html = fs.readFileSync(process.env.CRM_TEST_HTML || path.join(__dirname, '..', 'index.html'), 'utf8');
 function harness() {
   const elements = new Map();
   const document = { addEventListener() {}, querySelectorAll: () => [],
@@ -77,7 +77,7 @@ test('failed save keeps user inputs and stable retry key, shows server error and
   const { c, document, run } = harness();
   c.openPriceEditor('base-test');
   const key = run('priceEditorState.requestKey');
-  c.apiPost = async () => { run("currentUser.lastErrorMessage='價目已由其他人更新，請重新載入後再編輯'"); return null; };
+  c.apiPost = async (action, data, id, suppressAlert, failure) => { failure.message='價目已由其他人更新，請重新載入後再編輯'; return null; };
   await c.submitPriceEditor({ preventDefault() {}, target: { fields: { unit:'B6',floor:'4',price:'101' } } });
   assert.equal(run('priceEditorState.requestKey'), key);
   assert.equal(document.getElementById('price-entry-form').classList.contains('hidden'), false);
@@ -126,14 +126,14 @@ function priceSubmit(c, price = '101') {
   return c.submitPriceEditor({ preventDefault() {}, target: { fields: { unit:'B6',floor:'4',area:'-',price } } });
 }
 
-test('late save success cannot replace the menu or close a newly opened editor', async () => {
+test('late save success refreshes a newer menu without closing a newly opened editor', async () => {
   const { c, document, run, requests, toasts } = delayedPriceHarness();
   c.openPriceEditor('base-test'); const saving = priceSubmit(c);
   c.openPriceEditor('second-test');
   document.getElementById('price-entry-fields').innerHTML = 'unsaved second editor';
   assert.equal(document.getElementById('price-entry-save').disabled, false);
   requests[0].resolve(priceReply(1)); await saving;
-  assert.equal(run('appData.priceMenu.version'), 0);
+  assert.equal(run('appData.priceMenu.version'), 1);
   assert.equal(run('priceEditorState.id'), 'second-test');
   assert.equal(document.getElementById('price-entry-fields').innerHTML, 'unsaved second editor');
   assert.equal(document.getElementById('price-entry-form').classList.contains('hidden'), false);
@@ -149,7 +149,7 @@ for (const outcome of ['success', 'failure', 'rejection']) {
     if (outcome === 'rejection') { requests[0].reject(new Error('isolated failure')); await assert.rejects(first, /isolated failure/); }
     else { run("currentUser.lastErrorMessage='old save error'"); requests[0].resolve(outcome === 'success' ? priceReply(1) : null); await first; }
     assert.equal(run('priceEditorState.id'), 'second-test');
-    assert.equal(run('appData.priceMenu.version'), 0);
+    assert.equal(run('appData.priceMenu.version'), outcome === 'success' ? 1 : 0);
     assert.equal(document.getElementById('price-entry-fields').innerHTML, 'new pending editor');
     assert.equal(document.getElementById('price-entry-error').classList.contains('hidden'), true);
     assert.equal(document.getElementById('price-entry-save').disabled, true);
@@ -180,12 +180,12 @@ test('double submit of the same editor sends only one request even with a differ
   requests[0].resolve(priceReply(1)); await first;
 });
 
-test('tab switch invalidates a pending save without applying its menu or toast', async () => {
+test('tab switch retains its selection and hides stale toasts while a fresher saved menu arrives', async () => {
   const { c, run, requests, toasts } = delayedPriceHarness();
   c.openPriceEditor('base-test'); const saving = priceSubmit(c);
   c.setPriceMenuTab('options');
   requests[0].resolve(priceReply(1)); await saving;
-  assert.equal(run('appData.priceMenu.version'), 0);
+  assert.equal(run('appData.priceMenu.version'), 1);
   assert.equal(run('activePriceMenuTab'), 'options');
   assert.equal(run('priceEditorState'), null);
   assert.deepEqual(toasts, []);
@@ -246,4 +246,45 @@ test('current reload closes its own editor normally', async () => {
   assert.equal(run('appData.priceMenu.version'), 1);
   assert.equal(run('priceEditorState'), null);
   assert.equal(toasts.length, 1);
+});
+
+test('review 4257336484: a save version N+1 still refreshes after reload N finishes first', async () => {
+  const { c, document, run, requests } = delayedPriceHarness();
+  c.openPriceEditor('base-test'); const saving = priceSubmit(c); const loading = c.reloadPriceMenu();
+  requests[1].resolve(priceReply(0, 100)); await loading;
+  c.openPriceEditor('second-test');
+  document.getElementById('price-entry-fields').innerHTML = 'keep new editor input';
+  requests[0].resolve(priceReply(1, 101)); await saving;
+  assert.equal(run('appData.priceMenu.version'), 1);
+  assert.equal(run('appData.priceMenu.copy[0].price'), 101);
+  assert.equal(run('priceEditorState.id'), 'second-test');
+  assert.equal(document.getElementById('price-entry-fields').innerHTML, 'keep new editor input');
+});
+
+test('review 4257336490: duplicate reload does not advance sequence or discard the first response', async () => {
+  const { c, run } = harness(); const network = [], alerts = [];
+  run("currentUser.accessToken='isolated-fake-token'");
+  c.fetch = () => new Promise(resolve => network.push({ resolve }));
+  c.alert = message => alerts.push(message); c.showSaveToast = () => {};
+  const loading = c.reloadPriceMenu();
+  await c.reloadPriceMenu();
+  network[0].resolve({ json: async () => ({status:'success',data:priceReply(1)}) }); await loading;
+  assert.equal(network.length, 1);
+  assert.equal(run('appData.priceMenu.version'), 1);
+  assert.deepEqual(alerts, []);
+});
+
+test('review 4257336495: actual apiPost returns each save its own failure message', async () => {
+  const { c, document, run } = harness(); const network = [];
+  run("currentUser.accessToken='isolated-fake-token'; appData.priceMenu.copy.push({id:'second-test',unit:'B1',floor:2,price:200})");
+  c.fetch = () => new Promise((resolve, reject) => network.push({ resolve, reject }));
+  c.showSaveToast = () => {};
+  c.openPriceEditor('base-test'); const first = priceSubmit(c);
+  c.openPriceEditor('second-test'); const second = priceSubmit(c, '201');
+  network[0].resolve({ json: async () => ({status:'error',code:'VERSION_CONFLICT',message:'A version conflict'}) });
+  await first;
+  network[1].reject(new Error('B network failure')); await second;
+  assert.equal(run('priceEditorState.id'), 'second-test');
+  assert.equal(document.getElementById('price-entry-error').textContent, 'B network failure');
+  assert.equal(document.getElementById('price-entry-save').disabled, false);
 });
