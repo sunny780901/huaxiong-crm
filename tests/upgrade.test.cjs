@@ -23,6 +23,36 @@ function harness() {
     activePriceMenuTab = 'copy';`, c);
   return { c, document, elements, run: code => vm.runInContext(code, c) };
 }
+
+test('customer search handles legacy numeric phones, empty fields, text phones and status filters', () => {
+  const { c, document, run } = harness();
+  run(`appData.customers = [
+    {id:'numeric',姓名:'QA 數字電話',電話:987654321,訪客類別:'初訪'},
+    {id:'text',姓名:'QA 字串電話',電話:'0000000000',訪客類別:'回籠'},
+    {id:'empty',姓名:'QA 缺電話',電話:null,訪客類別:'初訪'},
+    {id:'unnamed',姓名:null,電話:123450000,訪客類別:'初訪'}
+  ];`);
+  const search = document.getElementById('customer-search-input');
+  const status = document.getElementById('customer-filter-status');
+  const list = document.getElementById('customer-list-container');
+  status.value = '';
+  search.value = '987';
+  c.renderCustomerList();
+  assert.match(list.innerHTML, /QA 數字電話/);
+  assert.doesNotMatch(list.innerHTML, /QA 字串電話|QA 缺電話/);
+  search.value = '0000000000';
+  c.renderCustomerList();
+  assert.match(list.innerHTML, /QA 字串電話/);
+  search.value = 'qa';
+  status.value = '回籠';
+  c.renderCustomerList();
+  assert.match(list.innerHTML, /QA 字串電話/);
+  assert.doesNotMatch(list.innerHTML, /QA 數字電話|QA 缺電話/);
+  status.value = '';
+  search.value = '';
+  c.renderCustomerList();
+  for (const id of ['numeric','text','empty','unnamed']) assert.ok(list.innerHTML.includes(id));
+});
 test('all inline scripts compile; runtime Tailwind and floating script URLs are removed', () => {
   assert.ok(!html.includes('cdn.tailwindcss.com'));
   assert.ok(!html.includes('tailwind.config ='));
