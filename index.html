@@ -2074,7 +2074,7 @@
             const statusFilter = document.getElementById('customer-filter-status').value;
 
             const filtered = appData.customers.filter(c => {
-                const matchSearch = (c.姓名 && c.姓名.toLowerCase().includes(search)) || (c.電話 && c.電話.includes(search));
+                const matchSearch = String(c.姓名 ?? '').toLowerCase().includes(search) || String(c.電話 ?? '').includes(search);
                 const matchStatus = !statusFilter || c.訪客類別 === statusFilter || c.成交狀態 === statusFilter;
                 return matchSearch && matchStatus;
             });
