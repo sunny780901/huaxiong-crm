@@ -2041,6 +2041,11 @@
                 permittedNames.includes(currentName);
         }
 
+        // 預約賞屋：全部在職職稱都可編輯任何預約；刪除仍限專案經理或原建立者。
+        function canEditAppointment() {
+            return ['專案經理', '行政副理', '銷售主任'].includes(currentUser.role);
+        }
+
         function editCustomer(id) {
             const row = appData.customers.find(item => String(item.id) === String(id));
             if (!row || !canEditOwnedRecord(row, row.接待人員)) return;
@@ -2529,8 +2534,8 @@
 
         function editAppointment(id) {
             const row = (appData.appointments || []).find(item => String(item.id) === String(id));
-            if (!row || !canEditOwnedRecord(row)) return;
-            fillRecordForm('appointment-form', appData.appointments, id, 'appointment-submit', '儲存預約修改');
+            if (!row || !canEditAppointment()) return;
+            fillRecordForm('appointment-form', appData.appointments, id, 'appointment-submit', '儲存預約修改', '', canEditAppointment);
             const input = document.querySelector('#appointment-form [name="預約時段"]');
             if (input) input.value = normalizeAppointmentTime(row.預約時段) || '10:00';
         }
@@ -2946,9 +2951,9 @@
             });
         }
 
-        function fillRecordForm(formId, rows, id, buttonId, buttonText, fallbackName = '') {
+        function fillRecordForm(formId, rows, id, buttonId, buttonText, fallbackName = '', canEdit = canEditOwnedRecord) {
             const row = rows.find(item => String(item.id) === String(id));
-            if (!row || !canEditOwnedRecord(row, fallbackName)) return;
+            if (!row || !canEdit(row, fallbackName)) return;
             const form = document.getElementById(formId);
             Object.keys(row).forEach(key => { if (form.elements[key] && form.elements[key].type !== 'file') form.elements[key].value = row[key] ?? ''; });
             form.elements.id.value = row.id;
@@ -2962,6 +2967,11 @@
         }
 
         function recordActionButtons(row, type, fallbackName = '') {
+            if (type === 'appointment') {
+                const editButton = canEditAppointment() ? `<button ${crmActionAttributes('editAppointment', row.id)} class="px-2 py-1 text-xs rounded bg-indigo-50 text-indigo-700">編輯</button>` : '';
+                const deleteButton = canEditOwnedRecord(row, fallbackName) ? `<button ${crmActionAttributes('deleteOwnedRecord', type, row.id, '預約')} class="px-2 py-1 text-xs rounded bg-red-50 text-red-700">刪除</button>` : '';
+                return editButton + deleteButton;
+            }
             if (!canEditOwnedRecord(row, fallbackName)) return '';
             const title = { appointment: '預約', task: '已購客進度', maintenance: '維修通報' }[type];
             return `<button ${crmActionAttributes({ appointment: 'editAppointment', task: 'editTask', maintenance: 'editMaintenance' }[type], row.id)} class="px-2 py-1 text-xs rounded bg-indigo-50 text-indigo-700">編輯</button><button ${crmActionAttributes('deleteOwnedRecord', type,row.id,title)} class="px-2 py-1 text-xs rounded bg-red-50 text-red-700">刪除</button>`;
