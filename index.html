@@ -1136,6 +1136,8 @@
             </section>
 
         </div>
+        <!-- 版本號：確認手機是否載入最新前端與後端 -->
+        <p id="crm-version-line" class="text-center text-xs text-gray-400 mt-6 py-2">前端 2026-11-04 · 後端 讀取中…</p>
     </main>
 
     <div id="crm-action-modal" class="crm-modal hidden" role="dialog" aria-modal="true">
@@ -1275,6 +1277,23 @@
         }
 
         function applyDefaultUserPermissions(role) { renderUserPermissionControls(roleDefaultPermissions(role)); }
+
+        // 前端每次發布更新此日期；後端版本由 GET 健康檢查取得，失敗時顯示 unknown，不猜測。
+        const CRM_FRONTEND_BUILD = '2026-11-04';
+        async function showCrmVersion() {
+            const line = document.getElementById('crm-version-line');
+            if (!line) return;
+            let backend = 'unknown';
+            try {
+                const response = await fetch(SCRIPT_URL, { method: 'GET', cache: 'no-store' });
+                const info = await response.json();
+                if (info && info.build) backend = String(info.build);
+            } catch (error) {
+                console.warn('CRM version check failed', error);
+            }
+            line.textContent = `前端 ${CRM_FRONTEND_BUILD} · 後端 ${backend}`;
+        }
+        window.addEventListener('DOMContentLoaded', () => { showCrmVersion(); });
 
         window.addEventListener('DOMContentLoaded', async () => {
             // 初始化日期顯示
