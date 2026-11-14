@@ -1,7 +1,7 @@
 name: CRM checks
 on:
   push:
-    branches: [main, crm-upgrade-20261013]
+    branches: [main]
   pull_request:
 permissions:
   contents: read

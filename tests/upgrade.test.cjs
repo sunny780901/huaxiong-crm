@@ -304,6 +304,59 @@ test('review 4257336490: duplicate reload does not advance sequence or discard t
   assert.deepEqual(alerts, []);
 });
 
+test('index.html starts in standards mode', () => {
+  assert.match(html, /^<!DOCTYPE html>\r?\n<html lang="zh-TW">/);
+});
+
+test('home hero date uses Asia/Taipei without changing formatDateKey', () => {
+  const formatDateKey = html.match(/function formatDateKey\(date\) \{\r?\n([\s\S]*?)\r?\n        \}/);
+  assert.ok(formatDateKey);
+  assert.equal(formatDateKey[1].includes('timeZone'), false);
+  assert.match(formatDateKey[1], /getFullYear\(\)/);
+  const assignment = html.match(/document\.getElementById\('current-date-str'\)\.innerText = (new Date\(\)\.toLocaleDateString\('zh-TW', \{[^}]+\}\));/);
+  assert.ok(assignment);
+  assert.match(assignment[1], /timeZone:\s*'Asia\/Taipei'/);
+  const instant = new Date('2026-11-13T16:30:00.000Z');
+  const formatted = vm.runInNewContext(assignment[1].replaceAll('new Date()', 'instant'), { instant });
+  assert.equal(formatted, '2026年11月14日');
+});
+
+test('version label comes from CRM_FRONTEND_BUILD and a failed health check shows unknown', async () => {
+  const declared = [...html.matchAll(/const CRM_FRONTEND_BUILD = '([^']*)'/g)];
+  assert.equal(declared.length, 1);
+  const build = declared[0][1];
+  assert.match(build, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(html.split(build).length - 1, 1);
+  const placeholder = html.match(/id="crm-version-line"[^>]*>([^<]*)</);
+  assert.ok(placeholder);
+  assert.match(placeholder[1], /讀取中/);
+  assert.equal(/\d{4}-\d{2}-\d{2}/.test(placeholder[1]), false);
+
+  const { c, document, run } = harness();
+  assert.equal(run('CRM_FRONTEND_BUILD'), build);
+  assert.match(String(c.showCrmVersion), /CRM_FRONTEND_BUILD/);
+  const line = document.getElementById('crm-version-line');
+  const warnings = [];
+  c.console = { warn: message => warnings.push(String(message)) };
+
+  c.fetch = async () => { throw new Error('health check failed'); };
+  await c.showCrmVersion();
+  assert.equal(line.textContent, `前端 ${build} · 後端 unknown`);
+
+  c.fetch = async () => ({ json: async () => { throw new Error('invalid json'); } });
+  await c.showCrmVersion();
+  assert.equal(line.textContent, `前端 ${build} · 後端 unknown`);
+
+  c.fetch = async () => ({ json: async () => ({ version: build, updated: build }) });
+  await c.showCrmVersion();
+  assert.equal(line.textContent, `前端 ${build} · 後端 unknown`);
+
+  c.fetch = async () => ({ json: async () => ({ build: 'qa-backend-48' }) });
+  await c.showCrmVersion();
+  assert.equal(line.textContent, `前端 ${build} · 後端 qa-backend-48`);
+  assert.deepEqual(warnings, ['CRM version check failed', 'CRM version check failed']);
+});
+
 test('review 4257336495: actual apiPost returns each save its own failure message', async () => {
   const { c, document, run } = harness(); const network = [];
   run("currentUser.accessToken='isolated-fake-token'; appData.priceMenu.copy.push({id:'second-test',unit:'B1',floor:2,price:200})");
