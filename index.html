@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="zh-TW"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1137,7 +1138,7 @@
 
         </div>
         <!-- 版本號：確認手機是否載入最新前端與後端 -->
-        <p id="crm-version-line" class="text-center text-xs text-gray-400 mt-6 py-2">前端 2026-11-04 · 後端 讀取中…</p>
+        <p id="crm-version-line" class="text-center text-xs text-gray-400 mt-6 py-2">讀取中…</p>
     </main>
 
     <div id="crm-action-modal" class="crm-modal hidden" role="dialog" aria-modal="true">
@@ -1278,7 +1279,7 @@
 
         function applyDefaultUserPermissions(role) { renderUserPermissionControls(roleDefaultPermissions(role)); }
 
-        // 前端每次發布更新此日期；後端版本由 GET 健康檢查取得，失敗時顯示 unknown，不猜測。
+        // 前端版本只寫在 CRM_FRONTEND_BUILD；頁面上的文字只是載入占位。後端版本由 GET 健康檢查取得，失敗時顯示 unknown，不猜測。
         const CRM_FRONTEND_BUILD = '2026-11-04';
         async function showCrmVersion() {
             const line = document.getElementById('crm-version-line');
@@ -1297,7 +1298,7 @@
 
         window.addEventListener('DOMContentLoaded', async () => {
             // 初始化日期顯示
-            document.getElementById('current-date-str').innerText = new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' });
+            document.getElementById('current-date-str').innerText = new Date().toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: 'long', day: 'numeric' });
             const reportDateInput = document.getElementById('report-anchor-date');
             if (reportDateInput) reportDateInput.value = formatDateKey(new Date());
 
