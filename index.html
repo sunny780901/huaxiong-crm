@@ -503,7 +503,6 @@
                                 <option value="盧易方">盧易方</option>
                                 <option value="呂冠美">呂冠美</option>
                                 <option value="宋嬌琦">宋嬌琦</option>
-                                <option value="林芝妍">林芝妍</option>
                                 <option value="楊沇鍰">楊沇鍰</option>
                             </select>
                         </div>
@@ -794,7 +793,6 @@
                             <option value="盧易方">盧易方</option>
                             <option value="呂冠美">呂冠美</option>
                             <option value="宋嬌琦">宋嬌琦</option>
-                            <option value="林芝妍">林芝妍</option>
                             <option value="楊沇鍰">楊沇鍰</option>
                         </select>
                         <div class="grid grid-cols-2 gap-2">
@@ -994,7 +992,6 @@
                             <option value="盧易方">盧易方</option>
                             <option value="呂冠美">呂冠美</option>
                             <option value="宋嬌琦">宋嬌琦</option>
-                            <option value="林芝妍">林芝妍</option>
                             <option value="楊沇鍰">楊沇鍰</option>
                         </select>
                         <input type="date" name="日期" required="" class="border border-gray-300 rounded-lg p-2.5 text-sm">
@@ -1142,7 +1139,7 @@
 
         </div>
         <!-- 版本號：確認手機是否載入最新前端與後端 -->
-        <p id="crm-version-line" class="text-center text-xs text-gray-400 mt-6 py-2">前端 2026-11-15 · 後端 讀取中…</p>
+        <p id="crm-version-line" class="text-center text-xs text-gray-400 mt-6 py-2">前端 2026-11-16 · 後端 讀取中…</p>
     </main>
 
     <div id="crm-action-modal" class="crm-modal hidden" role="dialog" aria-modal="true">
@@ -1290,7 +1287,7 @@
         function applyDefaultUserPermissions(role) { renderUserPermissionControls(roleDefaultPermissions(role)); }
 
         // 前端每次發布更新此日期；後端版本由 GET 健康檢查取得，失敗時顯示 unknown，不猜測。
-        const CRM_FRONTEND_BUILD = '2026-11-15';
+        const CRM_FRONTEND_BUILD = '2026-11-16';
         async function showCrmVersion() {
             const line = document.getElementById('crm-version-line');
             if (!line) return;
@@ -1687,6 +1684,9 @@
             const copy = Array.isArray(menu.copy) ? menu.copy : [];
             const options = Array.isArray(menu.options) ? menu.options : [];
             const parking = Array.isArray(menu.parking) ? menu.parking : [];
+            // 已售戶別由後端依客戶資料（正式成交、簽約未取消）即時推算；退戶後自動恢復。
+            const soldHouses = new Set(Array.isArray(menu.soldHouses) ? menu.soldHouses : []);
+            const isSoldHouse = row => activePriceMenuTab === 'houses' && soldHouses.has(`${String(row.unit || '').toUpperCase()}-${Number(row.floor)}F`);
             const rows = activePriceMenuTab === 'parking' ? parking : activePriceMenuTab === 'showcase' ? showcase : activePriceMenuTab === 'copy' ? copy : activePriceMenuTab === 'options' ? options : houses;
             const search = normalizePriceMenuSearch(document.getElementById('price-menu-search')?.value);
             const units = [...new Set(rows.map(row => row.unit).filter(Boolean))];
@@ -1711,7 +1711,8 @@
             }
             document.getElementById('price-menu-updated').textContent = menu.updatedAt ? `資料版本：${menu.updatedAt}` : '';
             const summaryLabel = { houses: '房屋表價', showcase: '實品屋價格', copy: 'COPY價格', options: '選配產品價格', parking: '車位表價' }[activePriceMenuTab];
-            document.getElementById('price-menu-summary').textContent = `${summaryLabel}｜${filtered.length}${activePriceMenuTab === 'options' ? ' 項' : activePriceMenuTab === 'parking' ? ' 種' : ' 戶'}`;
+            const soldCount = filtered.filter(isSoldHouse).length;
+            document.getElementById('price-menu-summary').textContent = `${summaryLabel}｜${filtered.length}${activePriceMenuTab === 'options' ? ' 項' : activePriceMenuTab === 'parking' ? ' 種' : ' 戶'}${soldCount ? `（已售 ${soldCount}）` : ''}`;
             document.getElementById('price-manager-tools').classList.toggle('hidden', !canManagePrices());
 
             if (!filtered.length) {
@@ -1719,9 +1720,9 @@
                 return;
             }
             container.innerHTML = filtered.map(row => ['houses', 'showcase', 'copy'].includes(activePriceMenuTab) ? `
-                <article class="overflow-hidden rounded-2xl border border-gold-100 bg-white shadow-sm">
+                <article class="overflow-hidden rounded-2xl border border-gold-100 bg-white shadow-sm"${isSoldHouse(row) ? ' style="opacity:.55"' : ''}>
                     <div class="flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-700 px-4 py-3 text-white">
-                        <div><p class="text-xs text-white/60">戶別樓層</p><h3 class="text-lg font-black">${escapeHtml(row.unit)}-${escapeHtml(row.floor)}F</h3></div>
+                        <div><p class="text-xs text-white/60">戶別樓層</p><h3 class="text-lg font-black">${escapeHtml(row.unit)}-${escapeHtml(row.floor)}F${isSoldHouse(row) ? ' <span class="ml-1 rounded-full bg-white px-2 py-0.5 text-xs font-bold text-gray-800">已售</span>' : ''}</h3></div>
                         <span class="rounded-full bg-white/10 px-3 py-1 text-xs font-bold">${row.area && row.area !== '-' ? `${escapeHtml(row.area)} 坪` : '參考價'}</span>
                     </div>
                     <div class="flex items-end justify-between gap-3 p-4">
@@ -1876,13 +1877,20 @@
             } finally { priceHistoryLoading = false; }
         }
 
+        // 在職人員＝使用者管理裡現有、且未停用的帳號；刪除或停用的人員自動從所有選單與排班圖例消失。
+        // 舊資料上的姓名（例如離職人員接待過的客戶）照常顯示，不受影響。
+        const FALLBACK_STAFF_NAMES = Object.freeze(['盧易方', '呂冠美', '宋嬌琦', '楊沇鍰']);
+        function getActiveStaffNames() {
+            const users = Array.isArray(appData.users) ? appData.users : [];
+            const active = users
+                .filter(user => ['', '啟用'].includes(String(user.帳號狀態 || '').trim()))
+                .map(user => normalizeReceptionStaffName(user.姓名))
+                .filter(Boolean);
+            return [...new Set(active.length ? active : FALLBACK_STAFF_NAMES)];
+        }
+
         function getRegistrationStaffNames() {
-            // 選單姓名不等於登入帳號；保留固定案場人員，並納入後端已登記人員。
-            return [...new Set([
-                '盧易方', '呂冠美', '宋嬌琦', '林芝妍', '楊沇鍰',
-                ...(appData.users || []).map(user => user.姓名),
-                currentUser.name
-            ].map(normalizeReceptionStaffName).filter(Boolean))];
+            return [...new Set([...getActiveStaffNames(), normalizeReceptionStaffName(currentUser.name)].filter(Boolean))];
         }
 
         function setRegistrationStaffOptions(select, names) {
@@ -1970,6 +1978,11 @@
             const id = data.id || '';
             delete data.id;
             if (currentUser.role === '銷售主任') data.接待人員 = normalizeReceptionStaffName(currentUser.name);
+            if (!confirmNoDuplicateDeal(data, id)) {
+                submitButton.disabled = false;
+                submitButton.innerText = originalButtonText;
+                return;
+            }
 
             const res = await apiPost(id ? 'updateCustomer' : 'addCustomer', data, id || null);
             if (res) {
@@ -2201,7 +2214,8 @@
         }
 
         function normalizeReceptionStaffName(value) {
-            const name = String(value ?? '').trim();
+            // LINE 顯示名稱常帶暱稱，例如「盧易方<SUNNY>」，統一成本名。
+            const name = String(value ?? '').trim().replace(/\s*[<＜][^<>＜＞]*[>＞]\s*$/, '').trim();
             const compact = name.replace(/\s+/g, '');
             if (['芝妍Yan', '芝姸Yan', '芝妍yan', '芝姸yan'].includes(compact)) return '林芝妍';
             // 部分舊資料使用拉丁／西里爾字母混排的 Meel 顯示名稱，統一歸入呂冠美。
@@ -2354,6 +2368,7 @@
         async function submitDealEditor(event, id) {
             event.preventDefault();
             const data = Object.fromEntries(new FormData(event.target).entries());
+            if (!confirmNoDuplicateDeal(data, id)) return;
             const result = await apiPost('updateCustomerProgress', data, id);
             if (!result) return;
             applyCustomerProgressResult(result, id);
@@ -2665,9 +2680,46 @@
         function resetTaskForm() { resetRecordForm('task-form', 'task-submit', '儲存進度'); }
 
         function isTaskCompleted(task) {
-            return ['已完成', '完成'].includes(String(task?.狀態 || '').trim())
+            return ['已完成', '完成', '已取消'].includes(String(task?.狀態 || '').trim())
                 || String(task?.目前流程 || '').trim() === '已完成'
                 || Boolean(String(task?.交屋完成時間 || '').trim());
+        }
+
+        // 同一戶已有別的客戶正式成交（簽約未取消）時，存檔前提醒，避免重複登記。
+        function findDuplicateDeal(unitText, customerId) {
+            const key = normalizeTaskUnitKey(unitText);
+            if (!key) return null;
+            const rows = [...(appData.teamCustomers || []), ...(appData.customers || [])];
+            return rows.find(row => String(row.id) !== String(customerId || '') && row.成交狀態 === '正式成交'
+                && row.簽約狀態 !== '取消' && normalizeTaskUnitKey(row.成交戶別) === key) || null;
+        }
+
+        function confirmNoDuplicateDeal(data, customerId) {
+            if (data.成交狀態 !== '正式成交' || !String(data.成交戶別 || '').trim()) return true;
+            const duplicate = findDuplicateDeal(data.成交戶別, customerId);
+            if (!duplicate) return true;
+            return confirm(`「${data.成交戶別}」已經有一筆正式成交（${duplicate.成交日期 || duplicate.訪客日期 || '日期未填'}，接待：${duplicate.接待人員 || '未填'}）。\n同一戶重複成交會讓成交數與銷控重複計算。\n\n確定還要儲存嗎？`);
+        }
+
+        // 成交總價統一成「萬」：「1415萬」「1167」→ 萬；超過 10 萬的純數字視為元。無法判讀回傳 null（顯示未知，不寫 0）。
+        function dealAmountInWan(value) {
+            const text = String(value ?? '').replace(/[,\s]/g, '');
+            const match = text.match(/^(\d+(?:\.\d+)?)(萬)?$/);
+            if (!match) return null;
+            const number = Number(match[1]);
+            return match[2] ? number : (number > 100000 ? number / 10000 : number);
+        }
+
+        function taskPaymentSummary(task) {
+            const paid = TASK_STAGES.reduce((sum, stage) => {
+                const amount = Number(normalizeTaskAmount(task[`${stage}繳款金額`]));
+                return Number.isFinite(amount) && String(task[`${stage}完成時間`] || '').trim() ? sum + amount : sum;
+            }, 0);
+            const customer = [...(appData.customers || []), ...(appData.teamCustomers || [])].find(row => String(row.id) === String(task.客戶ID || ''));
+            const total = customer ? dealAmountInWan(customer.成交總價) : null;
+            const round = value => Math.round(value * 100) / 100;
+            if (total === null) return `已繳 ${round(paid)} 萬｜尚欠：總價未填`;
+            return `已繳 ${round(paid)} 萬｜尚欠 ${round(Math.max(total - paid, 0))} 萬（總價 ${round(total)} 萬）`;
         }
 
         function normalizeTaskUnitKey(value) {
@@ -2733,6 +2785,7 @@
                         <div><p class="font-bold text-gray-800">${escapeHtml([t.戶別樓層, t.客戶姓名].filter(Boolean).join('｜') || t.任務內容 || '未填戶別樓層與客戶姓名')}</p><p class="text-xs text-gray-500 mt-1">負責人：${escapeHtml(t.負責人 || '')}｜日期：${escapeHtml(normalizeTaskDate(t.期限) || '未填')}｜時間：${escapeHtml(normalizeTaskTime(t.指定時間) || '未填')}</p></div>
                          <div class="flex items-center gap-2"><span class="text-xs px-2.5 py-1 rounded-full ${t.狀態 === '已完成' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-850'}">${escapeHtml(t.目前流程 || t.狀態 || '簽約')}</span>${photoButton(t, 'tasks')}${recordActionButtons(t, 'task', t.負責人)}</div>
                     </div>
+                    <p class="text-xs text-gray-600 mt-2">${escapeHtml(taskPaymentSummary(t))}</p>
                     <div class="task-workflow-scroll"><div class="task-workflow">${workflow}</div></div>
                 </article>`;
             }).join('');
@@ -3182,7 +3235,8 @@
             if (!container || !label) return;
             const staffColors = buildScheduleStaffColors();
             const legend = document.getElementById('schedule-staff-legend');
-            if (legend) legend.innerHTML = Object.entries(staffColors).map(([name, color]) => `<span class="leave-chip" style="color:${color.text};background:${color.background}">${escapeHtml(name)}</span>`).join('');
+            const activeStaff = new Set(getActiveStaffNames());
+            if (legend) legend.innerHTML = Object.entries(staffColors).filter(([name]) => activeStaff.has(name)).map(([name, color]) => `<span class="leave-chip" style="color:${color.text};background:${color.background}">${escapeHtml(name)}</span>`).join('');
 
             const year = scheduleCalendarMonth.getFullYear();
             const month = scheduleCalendarMonth.getMonth();
@@ -3201,7 +3255,7 @@
                 const weekday = new Date(year, month, day).getDay();
                 const rows = leaveRows.filter(row => String(row.日期) === dateKey);
                 const chips = rows.map(row => `
-                    <div class="leave-chip" style="color:${staffColors[String(row.人員 || '').trim()].text};background:${staffColors[String(row.人員 || '').trim()].background}">
+                    <div class="leave-chip" style="color:${staffColors[normalizeReceptionStaffName(row.人員)].text};background:${staffColors[normalizeReceptionStaffName(row.人員)].background}">
                         <span>${escapeHtml(row.人員)}・${escapeHtml(row.狀態)}</span>
                         ${canEditOwnedRecord(row) ? `<button type="button" class="leave-remove" aria-label="取消${escapeHtml(row.人員)}休假" ${crmActionAttributes('deleteScheduleEntry', row.id)}>×</button>` : ''}
                     </div>`).join('');
@@ -3230,9 +3284,9 @@
             // 固定人員配色；同一人不會因月份或假別改變顏色。
             const fixed = { '盧易方': 215, '宋嬌琦': 330, '林芝妍': 155, '呂冠美': 275 };
             const names = [...new Set([
-                ...(appData.users || []).map(row => String(row.姓名 || '').trim()),
-                ...(appData.schedules || []).map(row => String(row.人員 || '').trim())
-            ])].sort();
+                ...getActiveStaffNames(),
+                ...(appData.schedules || []).map(row => normalizeReceptionStaffName(row.人員))
+            ].filter(Boolean))].sort();
             const colors = Object.create(null);
             const used = new Set(Object.values(fixed));
             names.forEach(name => {
