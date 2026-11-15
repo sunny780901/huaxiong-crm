@@ -9,7 +9,7 @@ function extract(name) {
     const end = next ? start + 1 + next.index : -1;
     return source.slice(start, end < 0 ? undefined : end).trim();
 }
-const names = ['appointmentDateKey', 'countTodayAppointments', 'dashboardMonthKey', 'countMonthlyCustomers', 'countMonthlyDeals', 'updateMonthlyCustomerStats', 'isTaskCompleted', 'normalizeTaskUnitKey', 'taskProgressScore', 'getActiveTaskGroups', 'renderTasksList', 'initAppUI', 'applyCustomerWriteResult', 'removeCustomerLocally', 'renderChangedModule'];
+const names = ['appointmentDateKey', 'countTodayAppointments', 'dashboardMonthKey', 'countMonthlyCustomers', 'countMonthlyDeals', 'updateMonthlyCustomerStats', 'isTaskCompleted', 'normalizeTaskUnitKey', 'dealAmountInWan', 'taskPaymentSummary', 'taskProgressScore', 'getActiveTaskGroups', 'renderTasksList', 'initAppUI', 'applyCustomerWriteResult', 'removeCustomerLocally', 'renderChangedModule'];
 const elements = new Map();
 const get = id => {
     if (!elements.has(id)) elements.set(id, {innerText: '', innerHTML: '', classList: {add(){}, remove(){}}});
