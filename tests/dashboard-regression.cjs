@@ -18,7 +18,8 @@ const get = id => {
 const RealDate = Date;
 class FixedDate extends RealDate { constructor(...args) { super(...(args.length ? args : ['2026-10-08T04:00:00Z'])); } }
 const context = {
-    Intl, Date: FixedDate, TASK_STAGES: ['簽約', '對保', '驗屋', '複驗', '交屋'],
+    Intl, Date: FixedDate, TASK_STAGES: ['下訂', '簽約', '對保', '驗屋', '複驗', '交屋'], DEPOSIT_STAGE: '下訂', DEFAULT_DEPOSIT_AMOUNT: 10,
+    isBlankDeposit: task => !String(task?.下訂日期 || '').trim() && !String(task?.下訂完成時間 || '').trim(),
     document: {getElementById: get}, currentUser: {name: 'Fixture', permissions: {manageUsers: false}},
     appData: {customers: [], teamCustomers: [], tasks: [], appointments: [], followUps: []},
     canEditOwnedRecord: () => false,

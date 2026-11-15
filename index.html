@@ -671,6 +671,11 @@
                                 <input type="text" name="成交總價" placeholder="例如：1280萬" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm">
                             </div>
                             <div>
+                                <label class="block text-xs font-bold text-gray-700 mb-1">成交日期</label>
+                                <input type="date" name="成交日期" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm">
+                                <p class="text-xs text-gray-400 mt-1">正式成交未填時，以訪客日期計算</p>
+                            </div>
+                            <div>
                                 <label class="block text-xs font-bold text-gray-700 mb-1">預定簽約日</label>
                                 <input type="date" name="預定簽約日" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm">
                             </div>
@@ -1137,7 +1142,7 @@
 
         </div>
         <!-- 版本號：確認手機是否載入最新前端與後端 -->
-        <p id="crm-version-line" class="text-center text-xs text-gray-400 mt-6 py-2">前端 2026-11-04 · 後端 讀取中…</p>
+        <p id="crm-version-line" class="text-center text-xs text-gray-400 mt-6 py-2">前端 2026-11-15 · 後端 讀取中…</p>
     </main>
 
     <div id="crm-action-modal" class="crm-modal hidden" role="dialog" aria-modal="true">
@@ -1231,7 +1236,13 @@
         });
         const reportCharts = { source: null, area: null, room: null };
         const LEAVE_TYPES = ['休假', '病假', '事假', '特休'];
-        const TASK_STAGES = Object.freeze(['簽約', '對保', '驗屋', '複驗', '交屋']);
+        // 下訂＝成交：只有日期與金額（預設 10 萬），不需時間；舊客戶下訂留白不擋後續流程。
+        const TASK_STAGES = Object.freeze(['下訂', '簽約', '對保', '驗屋', '複驗', '交屋']);
+        const DEPOSIT_STAGE = '下訂';
+        const DEFAULT_DEPOSIT_AMOUNT = 10;
+        function isBlankDeposit(task) {
+            return !String(task?.[`${DEPOSIT_STAGE}日期`] || '').trim() && !String(task?.[`${DEPOSIT_STAGE}完成時間`] || '').trim();
+        }
         const MODULE_LABELS = {
             teamOverview: '團隊客戶總覽', customerForm: '客戶資料登記', customerList: '我的客戶',
             appointments: '預約賞屋', tasks: '已購客進度', reports: '銷售報表統計',
@@ -1279,7 +1290,7 @@
         function applyDefaultUserPermissions(role) { renderUserPermissionControls(roleDefaultPermissions(role)); }
 
         // 前端每次發布更新此日期；後端版本由 GET 健康檢查取得，失敗時顯示 unknown，不猜測。
-        const CRM_FRONTEND_BUILD = '2026-11-04';
+        const CRM_FRONTEND_BUILD = '2026-11-15';
         async function showCrmVersion() {
             const line = document.getElementById('crm-version-line');
             if (!line) return;
@@ -1962,7 +1973,10 @@
 
             const res = await apiPost(id ? 'updateCustomer' : 'addCustomer', data, id || null);
             if (res) {
-                applyCustomerWriteResult(res, id);
+                const linkedTaskError = res.linkedTaskError;
+                delete res.linkedTaskError;
+                applyCustomerProgressResult(res, id || res.id);
+                if (linkedTaskError) alert(`客戶資料已儲存，但已購客進度沒有建立：${linkedTaskError}\n請按「編輯成交」補齊成交戶別後再儲存。`);
                 resetCustomerForm();
                 switchView('customer-list');
                 showSaveToast(id ? '客戶資料已更新' : '客戶資料新增成功');
@@ -2698,14 +2712,20 @@
                 const workflow = TASK_STAGES.map((stage, index) => {
                     const finishedAt = String(t[`${stage}完成時間`] || '');
                     const stageDate = normalizeTaskDate(t[`${stage}日期`] || finishedAt.slice(0, 10));
-                    const stageTime = normalizeTaskTime(t[`${stage}時間`] || (stage === '簽約' ? t.指定時間 : ''));
-                    const stageDateTime = stageDate && stageTime ? `${stageDate}T${stageTime.slice(0, 5)}` : '';
-                    const amount = normalizeTaskAmount(t[`${stage}繳款金額`]);
-                    const previousDone = index === 0 || Boolean(t[`${TASK_STAGES[index - 1]}完成時間`]);
+                    const isDeposit = stage === DEPOSIT_STAGE;
+                    const stageTime = isDeposit ? '' : normalizeTaskTime(t[`${stage}時間`] || (stage === '簽約' ? t.指定時間 : ''));
+                    const stageDateTime = isDeposit ? stageDate : (stageDate && stageTime ? `${stageDate}T${stageTime.slice(0, 5)}` : '');
+                    const storedAmount = normalizeTaskAmount(t[`${stage}繳款金額`]);
+                    const amount = isDeposit && storedAmount === '' && !finishedAt ? String(DEFAULT_DEPOSIT_AMOUNT) : storedAmount;
+                    const previousStage = index > 0 ? TASK_STAGES[index - 1] : '';
+                    const previousDone = index === 0 || Boolean(t[`${previousStage}完成時間`]) || (previousStage === DEPOSIT_STAGE && isBlankDeposit(t));
+                    if (isDeposit && isBlankDeposit(t) && !canOperate) {
+                        return `<div class="task-stage"><span class="task-stage-name">${index + 1}. ${stage}</span><div class="task-stage-controls"><span class="text-xs text-gray-400">未登記（舊客戶不需補）</span></div></div>`;
+                    }
                     const inputBase = `task-${String(t.id).replace(/[^a-zA-Z0-9_-]/g, '')}-${index}`;
                     const action = canOperate
-                        ? `<span class="task-stage-datetime-wrap"><input id="${inputBase}-date" type="date" value="${escapeHtml(stageDate)}" aria-label="${stage}日期"><input id="${inputBase}-time" type="time" value="${escapeHtml(stageTime)}" aria-label="${stage}時間"></span><input id="${inputBase}-amount" type="number" min="0" step="0.01" value="${escapeHtml(amount)}" placeholder="金額（萬）" aria-label="${stage}繳款金額（萬）"><span class="task-stage-actions"><button class="task-save" type="button" ${crmActionAttributes('saveTaskStage', t.id,stage,index,false)}>儲存</button><button type="button" ${previousDone ? '' : 'disabled'} ${crmActionAttributes('saveTaskStage', t.id,stage,index,true)}>${finishedAt ? '更新' : '完成'}</button></span>`
-                        : `<span class="task-stage-datetime text-xs text-gray-600">${stageDateTime ? escapeHtml(stageDateTime.replace('T', ' ')) : '未填日期時間'}</span><span class="text-xs text-gray-600">${amount === '' ? '未填金額' : `${escapeHtml(amount)} 萬`}</span><span class="text-xs font-bold ${finishedAt ? 'text-emerald-700' : 'text-gray-400'}">${finishedAt ? '已完成' : '未完成'}</span>`;
+                        ? `<span class="task-stage-datetime-wrap"><input id="${inputBase}-date" type="date" value="${escapeHtml(stageDate)}" aria-label="${stage}日期">${isDeposit ? '' : `<input id="${inputBase}-time" type="time" value="${escapeHtml(stageTime)}" aria-label="${stage}時間">`}</span><input id="${inputBase}-amount" type="number" min="0" step="0.01" value="${escapeHtml(amount)}" placeholder="金額（萬）" aria-label="${stage}繳款金額（萬）"><span class="task-stage-actions"><button class="task-save" type="button" ${crmActionAttributes('saveTaskStage', t.id,stage,index,false)}>儲存</button><button type="button" ${previousDone ? '' : 'disabled'} ${crmActionAttributes('saveTaskStage', t.id,stage,index,true)}>${finishedAt ? '更新' : '完成'}</button></span>`
+                        : `<span class="task-stage-datetime text-xs text-gray-600">${stageDateTime ? escapeHtml(stageDateTime.replace('T', ' ')) : (isDeposit ? '未填日期' : '未填日期時間')}</span><span class="text-xs text-gray-600">${amount === '' ? '未填金額' : `${escapeHtml(amount)} 萬`}</span><span class="text-xs font-bold ${finishedAt ? 'text-emerald-700' : 'text-gray-400'}">${finishedAt ? '已完成' : '未完成'}</span>`;
                     return `<div class="task-stage ${finishedAt ? 'done' : ''}"><span class="task-stage-name">${index + 1}. ${stage}</span><div class="task-stage-controls">${action}</div></div>`;
                 }).join('');
                 return `<article class="task-card text-sm">
@@ -2724,10 +2744,11 @@
             const inputBase = `task-${String(id).replace(/[^a-zA-Z0-9_-]/g, '')}-${index}`;
             const dateText = String(document.getElementById(`${inputBase}-date`)?.value ?? '').trim();
             const timeText = String(document.getElementById(`${inputBase}-time`)?.value ?? '').trim();
-            const dateTimeText = dateText && timeText ? `${dateText}T${timeText}` : '';
+            const isDeposit = stage === DEPOSIT_STAGE;
+            const dateTimeText = isDeposit ? dateText : (dateText && timeText ? `${dateText}T${timeText}` : '');
             const amountText = String(document.getElementById(`${inputBase}-amount`)?.value ?? '').trim();
-            if (!/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(dateTimeText)) {
-                alert(`請填寫${stage}日期與時間。`);
+            if (isDeposit ? !/^\d{4}-\d{2}-\d{2}$/.test(dateText) : !/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(dateTimeText)) {
+                alert(isDeposit ? '請填寫下訂日期。' : `請填寫${stage}日期與時間。`);
                 return;
             }
             if ((markComplete && amountText === '') || (amountText !== '' && (!Number.isFinite(Number(amountText)) || Number(amountText) < 0))) {
@@ -2735,9 +2756,12 @@
                 return;
             }
             const alreadyDone = Boolean(row[`${stage}完成時間`]);
-            const actionText = markComplete ? (alreadyDone ? '更新完成資料' : '標記完成') : '儲存日期時間';
-            if (!confirm(`確定${actionText}「${stage}」？\n日期時間：${dateTimeText.replace('T', ' ')}${amountText === '' ? '' : `\n繳款金額：${Number(amountText).toLocaleString('zh-TW')} 萬`}`)) return;
-            const result = await apiPost('advanceTaskStage', { stage, dateTime: dateTimeText, amount: amountText === '' ? null : Number(amountText), complete: markComplete }, id);
+            const actionText = markComplete ? (alreadyDone ? '更新完成資料' : '標記完成') : (isDeposit ? '儲存日期' : '儲存日期時間');
+            if (!confirm(`確定${actionText}「${stage}」？\n${isDeposit ? '日期' : '日期時間'}：${dateTimeText.replace('T', ' ')}${amountText === '' ? '' : `\n繳款金額：${Number(amountText).toLocaleString('zh-TW')} 萬`}`)) return;
+            const payload = isDeposit
+                ? { stage, date: dateText, amount: amountText === '' ? null : Number(amountText), complete: markComplete }
+                : { stage, dateTime: dateTimeText, amount: amountText === '' ? null : Number(amountText), complete: markComplete };
+            const result = await apiPost('advanceTaskStage', payload, id);
             if (!result) return;
             upsertLocalRecord('tasks', result, id);
             renderChangedModule('tasks');
@@ -2748,11 +2772,11 @@
             const expectedDate = dateTimeText.slice(0, 10);
             const expectedTime = dateTimeText.slice(11, 16);
             const amountSaved = amountText === '' || (savedAmount !== '' && Number(savedAmount) === Number(amountText));
-            if (savedDate !== expectedDate || savedTime !== expectedTime || !amountSaved) {
+            if (savedDate !== expectedDate || (!isDeposit && savedTime !== expectedTime) || !amountSaved) {
                 alert(`${stage}資料未完整寫入，請不要重複操作並通知專案經理。\n日期：${savedDate || '未寫入'}\n時間：${savedTime || '未寫入'}\n金額：${savedAmount === '' ? '未寫入' : `${savedAmount} 萬`}`);
                 return;
             }
-            if (!markComplete) alert(`${stage}日期時間${amountText === '' ? '' : '與金額'}已儲存，當日早上 09:30 會列入 LINE 提醒。`);
+            if (!markComplete) alert(`${stage}${isDeposit ? '日期' : '日期時間'}${amountText === '' ? '' : '與金額'}已儲存${isDeposit ? '。' : '，當日早上 09:30 會列入 LINE 提醒。'}`);
             switchView('tasks');
         }
 
