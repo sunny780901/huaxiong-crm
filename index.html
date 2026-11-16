@@ -1143,7 +1143,7 @@
 
         </div>
         <!-- 版本號：確認手機是否載入最新前端與後端 -->
-        <p id="crm-version-line" class="text-center text-xs text-gray-400 mt-6 py-2">前端 2026-11-16b · 後端 讀取中…</p>
+        <p id="crm-version-line" class="text-center text-xs text-gray-400 mt-6 py-2">前端 2026-11-16c · 後端 讀取中…</p>
     </main>
 
     <div id="crm-action-modal" class="crm-modal hidden" role="dialog" aria-modal="true">
@@ -1291,7 +1291,7 @@
         function applyDefaultUserPermissions(role) { renderUserPermissionControls(roleDefaultPermissions(role)); }
 
         // 前端每次發布更新此日期；後端版本由 GET 健康檢查取得，失敗時顯示 unknown，不猜測。
-        const CRM_FRONTEND_BUILD = '2026-11-16b';
+        const CRM_FRONTEND_BUILD = '2026-11-16c';
         async function showCrmVersion() {
             const line = document.getElementById('crm-version-line');
             if (!line) return;
@@ -1988,7 +1988,9 @@
                 return;
             }
 
+            const newDeal = isNewFormalDeal(data, id);
             const res = await apiPost(id ? 'updateCustomer' : 'addCustomer', data, id || null);
+            if (res && newDeal && window.xmasCelebrate) window.xmasCelebrate();
             if (res) {
                 const linkedTaskError = res.linkedTaskError;
                 delete res.linkedTaskError;
@@ -2374,8 +2376,10 @@
             event.preventDefault();
             const data = Object.fromEntries(new FormData(event.target).entries());
             if (!confirmNoDuplicateDeal(data, id)) return;
+            const newDeal = isNewFormalDeal(data, id);
             const result = await apiPost('updateCustomerProgress', data, id);
             if (!result) return;
+            if (newDeal && window.xmasCelebrate) window.xmasCelebrate();
             applyCustomerProgressResult(result, id);
             closeCrmModal();
             switchView('team-overview');
@@ -2697,6 +2701,14 @@
             const rows = [...(appData.teamCustomers || []), ...(appData.customers || [])];
             return rows.find(row => String(row.id) !== String(customerId || '') && row.成交狀態 === '正式成交'
                 && row.簽約狀態 !== '取消' && normalizeTaskUnitKey(row.成交戶別) === key) || null;
+        }
+
+        // 這次存檔是否把客戶「變成」正式成交（原本不是），用來觸發節慶祝賀。
+        function isNewFormalDeal(data, customerId) {
+            if (data.成交狀態 !== '正式成交') return false;
+            if (!customerId) return true;
+            const before = [...(appData.customers || []), ...(appData.teamCustomers || [])].find(row => String(row.id) === String(customerId));
+            return !before || before.成交狀態 !== '正式成交';
         }
 
         function confirmNoDuplicateDeal(data, customerId) {
@@ -3600,6 +3612,163 @@
                 }
             });
         }
+    </script>
+    <!-- 聖誕節氣氛（11/15–12/26 自動開啟；網址加 ?xmas=0 關閉、?xmas=1 強制開啟；右上角雪花鈕可個人關閉） -->
+    <style id="xmas-style">
+        body.xmas .premium-header { background: linear-gradient(100deg, #7f1d1d 0%, #8a1c1c 38%, #14532d 100%) !important; }
+        body.xmas .premium-header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -7px; height: 14px; pointer-events: none;
+            background-image: radial-gradient(circle, #fde68a 0 3px, transparent 4px), radial-gradient(circle, #f87171 0 3px, transparent 4px), radial-gradient(circle, #86efac 0 3px, transparent 4px), radial-gradient(circle, #93c5fd 0 3px, transparent 4px);
+            background-size: 72px 14px; background-position: 0 50%, 18px 50%, 36px 50%, 54px 50%; background-repeat: repeat-x;
+            animation: xmas-twinkle 1.6s steps(2) infinite; }
+        body.xmas .premium-header { position: sticky; }
+        @keyframes xmas-twinkle { 50% { opacity: .35; filter: saturate(.6); } }
+        #xmas-snow { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+        .xmas-toggle { width: 2rem; height: 2rem; border-radius: 9999px; background: rgba(255,255,255,.14); color: #fff; font-size: .95rem; line-height: 2rem; text-align: center; }
+        .xmas-banner { position: relative; overflow: hidden; margin-top: 1rem; border-radius: 1rem; padding: 1rem 1.1rem; color: #fff;
+            background: linear-gradient(120deg, #14532d, #166534 55%, #7f1d1d); box-shadow: 0 10px 24px -12px rgba(20,83,45,.7); }
+        .xmas-banner .xmas-days { font-size: 2rem; font-weight: 900; line-height: 1; color: #fde68a; text-shadow: 0 0 12px rgba(253,230,138,.55); }
+        .xmas-banner .xmas-line { padding-right: 76px; font-size: .8rem; opacity: .9; min-height: 1.2em; transition: opacity .5s; }
+        .xmas-tree { position: absolute; right: .7rem; bottom: -.2rem; width: 72px; height: 88px; }
+        .xmas-tree .star { transform-origin: 36px 9px; animation: xmas-star 2.4s ease-in-out infinite; }
+        .xmas-tree .bulb { animation: xmas-twinkle 1.2s steps(2) infinite; }
+        .xmas-tree .bulb:nth-child(2n) { animation-delay: .6s; }
+        @keyframes xmas-star { 50% { transform: scale(1.25) rotate(18deg); filter: drop-shadow(0 0 6px #fde68a); } }
+        .xmas-gift { display: inline-block; animation: xmas-swing 2.2s ease-in-out infinite; transform-origin: 50% 0; }
+        @keyframes xmas-swing { 25% { transform: rotate(9deg); } 75% { transform: rotate(-9deg); } }
+        .xmas-cheer { position: fixed; left: 50%; top: 38%; transform: translate(-50%,-50%) scale(.6); z-index: 120; opacity: 0; pointer-events: none;
+            background: #fff; color: #7f1d1d; border: 2px solid #fde68a; border-radius: 1.25rem; padding: 1rem 1.4rem; font-weight: 900; font-size: 1.15rem; text-align: center;
+            box-shadow: 0 20px 40px -10px rgba(127,29,29,.45); transition: transform .35s cubic-bezier(.2,1.6,.4,1), opacity .35s; }
+        .xmas-cheer.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+        .xmas-cheer { min-width: 15rem; white-space: nowrap; }
+        .xmas-cheer .xmas-gift { display: block; margin: 0 auto .3rem; width: max-content; }
+        @media (prefers-reduced-motion: reduce) {
+            body.xmas .premium-header::after, .xmas-tree .star, .xmas-tree .bulb, .xmas-gift { animation: none; }
+        }
+    </style>
+    <script>
+        (function () {
+            if (typeof URLSearchParams === 'undefined' || typeof location === 'undefined' || typeof requestAnimationFrame === 'undefined') return;
+            const params = new URLSearchParams(location.search);
+            const now = new Date();
+            const month = now.getMonth() + 1, day = now.getDate();
+            const inSeason = (month === 11 && day >= 15) || (month === 12 && day <= 26);
+            const forced = params.get('xmas');
+            if (forced === '0' || (!inSeason && forced !== '1')) return;
+            const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+            let snowOn = true;
+            try { snowOn = localStorage.getItem('crm-xmas-snow') !== 'off'; } catch (error) { /* 無痕模式略過 */ }
+
+            const LINES = ['聖誕檔期衝刺中，每一組來客都是好禮 🎁', '今天多一次追蹤，聖誕節多一份成交 ✨', '把握年前購屋潮，一起迎接好年 🔔', '溫暖接待每位客人，讓家的故事從這裡開始 🏡'];
+
+            function daysToChristmas() {
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                return Math.round((new Date(now.getFullYear(), 11, 25) - today) / 86400000);
+            }
+
+            function treeSvg() {
+                return '<svg class="xmas-tree" viewBox="0 0 72 88" aria-hidden="true">' +
+                    '<path d="M36 12 58 44H46l16 22H10l16-22H14z" fill="#22c55e" opacity=".9"/><path d="M36 26 54 52H18z" fill="#16a34a"/>' +
+                    '<rect x="31" y="66" width="10" height="12" fill="#92400e"/>' +
+                    '<g><circle class="bulb" cx="28" cy="40" r="2.6" fill="#fde68a"/><circle class="bulb" cx="44" cy="46" r="2.6" fill="#f87171"/>' +
+                    '<circle class="bulb" cx="24" cy="58" r="2.6" fill="#93c5fd"/><circle class="bulb" cx="40" cy="60" r="2.6" fill="#fde68a"/><circle class="bulb" cx="50" cy="62" r="2.6" fill="#f87171"/></g>' +
+                    '<path class="star" d="M36 2l2.4 5 5.5.6-4.1 3.7 1.2 5.4L36 14l-5 2.7 1.2-5.4-4.1-3.7 5.5-.6z" fill="#fde68a"/></svg>';
+            }
+
+            function addBanner() {
+                const hero = document.querySelector('#view-dashboard .hero-card');
+                if (!hero || document.getElementById('xmas-banner')) return;
+                const days = daysToChristmas();
+                const title = days > 0 ? '距離聖誕節還有' : (days === 0 ? '聖誕快樂！' : '聖誕佳節愉快');
+                const banner = document.createElement('div');
+                banner.id = 'xmas-banner';
+                banner.className = 'xmas-banner';
+                banner.innerHTML = '<p class="text-xs font-bold" style="letter-spacing:.12em;opacity:.85">MERRY CHRISTMAS · 華雄天地</p>' +
+                    '<div class="flex items-end gap-2 mt-1"><span class="text-sm font-bold">' + title + '</span>' +
+                    (days > 0 ? '<span class="xmas-days">' + days + '</span><span class="text-sm font-bold">天</span>' : '<span class="xmas-gift text-2xl">🎁</span>') + '</div>' +
+                    '<p class="xmas-line mt-2" id="xmas-line">' + LINES[0] + '</p>' + treeSvg();
+                hero.appendChild(banner);
+                let index = 0;
+                if (!reduceMotion) setInterval(function () {
+                    const line = document.getElementById('xmas-line');
+                    if (!line) return;
+                    line.style.opacity = '0';
+                    setTimeout(function () { index = (index + 1) % LINES.length; line.textContent = LINES[index]; line.style.opacity = '.9'; }, 500);
+                }, 6000);
+            }
+
+            let canvas, ctx, flakes = [], running = false, frame = 0;
+            function startSnow() {
+                if (reduceMotion || running) return;
+                canvas = document.getElementById('xmas-snow') || document.body.appendChild(Object.assign(document.createElement('canvas'), { id: 'xmas-snow' }));
+                canvas.style.display = '';
+                ctx = canvas.getContext('2d');
+                const resize = function () { canvas.width = innerWidth * devicePixelRatio; canvas.height = innerHeight * devicePixelRatio; };
+                resize(); addEventListener('resize', resize);
+                const count = innerWidth < 640 ? 28 : 55;
+                flakes = Array.from({ length: count }, function () {
+                    return { x: Math.random(), y: Math.random(), r: 1.4 + Math.random() * 2.4, s: .0006 + Math.random() * .0012, d: Math.random() * Math.PI * 2 };
+                });
+                running = true;
+                const tick = function () {
+                    if (!running) return;
+                    if (!document.hidden) {
+                        const w = canvas.width, h = canvas.height, k = devicePixelRatio;
+                        ctx.clearRect(0, 0, w, h);
+                        ctx.fillStyle = 'rgba(255,255,255,.85)';
+                        ctx.shadowColor = 'rgba(71,105,150,.55)'; ctx.shadowBlur = 5 * k;
+                        frame += 1;
+                        flakes.forEach(function (f) {
+                            f.y += f.s; f.x += Math.sin(frame / 90 + f.d) * .0004;
+                            if (f.y > 1.02) { f.y = -.02; f.x = Math.random(); }
+                            ctx.beginPath(); ctx.arc(f.x * w, f.y * h, f.r * k, 0, Math.PI * 2); ctx.fill();
+                        });
+                    }
+                    requestAnimationFrame(tick);
+                };
+                requestAnimationFrame(tick);
+            }
+            function stopSnow() {
+                running = false;
+                if (canvas) { ctx.clearRect(0, 0, canvas.width, canvas.height); canvas.style.display = 'none'; }
+            }
+
+            function addToggle() {
+                const logout = document.querySelector('.logout-button');
+                if (!logout || document.getElementById('xmas-toggle') || reduceMotion) return;
+                const button = document.createElement('button');
+                button.type = 'button'; button.id = 'xmas-toggle'; button.className = 'xmas-toggle';
+                const paint = function () { button.textContent = snowOn ? '❄' : '☃'; button.title = snowOn ? '關閉下雪' : '開啟下雪'; button.setAttribute('aria-label', button.title); };
+                button.onclick = function () {
+                    snowOn = !snowOn; paint();
+                    try { localStorage.setItem('crm-xmas-snow', snowOn ? 'on' : 'off'); } catch (error) { /* 略過 */ }
+                    snowOn ? startSnow() : stopSnow();
+                };
+                paint();
+                logout.parentNode.insertBefore(button, logout);
+            }
+
+            // 正式成交存檔成功時，跳出聖誕祝賀並下一陣大雪。
+            window.xmasCelebrate = function () {
+                const cheer = document.createElement('div');
+                cheer.className = 'xmas-cheer';
+                cheer.innerHTML = '<div class="xmas-gift" style="font-size:2.4rem">🎁</div>聖誕好禮成交！<div class="text-xs font-bold mt-1" style="color:#166534">恭喜！又一個家找到主人 🎄</div>';
+                document.body.appendChild(cheer);
+                requestAnimationFrame(function () { cheer.classList.add('show'); });
+                if (running) flakes.forEach(function (f) { f.s *= 3; });
+                setTimeout(function () { cheer.classList.remove('show'); if (running) flakes.forEach(function (f) { f.s /= 3; }); }, 2600);
+                setTimeout(function () { cheer.remove(); }, 3100);
+            };
+
+            function init() {
+                document.body.classList.add('xmas');
+                addToggle(); addBanner();
+                if (snowOn) startSnow();
+                const observer = new MutationObserver(addBanner);
+                const container = document.getElementById('app-container');
+                if (container) observer.observe(container, { childList: true, subtree: false, attributes: true, attributeFilter: ['class'] });
+            }
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+        })();
     </script>
 </body>
 </html>
