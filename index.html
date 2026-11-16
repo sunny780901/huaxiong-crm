@@ -687,6 +687,10 @@
                                     <option value="取消">取消</option>
                                 </select>
                             </div>
+                            <div class="sm:col-span-2">
+                                <label class="block text-xs font-bold text-gray-700 mb-1">備註</label>
+                                <textarea name="成交備註" rows="3" maxlength="500" placeholder="是否有含贈品及裝潢，請填入品項及金額" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm"></textarea>
+                            </div>
                         </div>
                     </div>
 
@@ -1139,7 +1143,7 @@
 
         </div>
         <!-- 版本號：確認手機是否載入最新前端與後端 -->
-        <p id="crm-version-line" class="text-center text-xs text-gray-400 mt-6 py-2">前端 2026-11-16 · 後端 讀取中…</p>
+        <p id="crm-version-line" class="text-center text-xs text-gray-400 mt-6 py-2">前端 2026-11-16b · 後端 讀取中…</p>
     </main>
 
     <div id="crm-action-modal" class="crm-modal hidden" role="dialog" aria-modal="true">
@@ -1287,7 +1291,7 @@
         function applyDefaultUserPermissions(role) { renderUserPermissionControls(roleDefaultPermissions(role)); }
 
         // 前端每次發布更新此日期；後端版本由 GET 健康檢查取得，失敗時顯示 unknown，不猜測。
-        const CRM_FRONTEND_BUILD = '2026-11-16';
+        const CRM_FRONTEND_BUILD = '2026-11-16b';
         async function showCrmVersion() {
             const line = document.getElementById('crm-version-line');
             if (!line) return;
@@ -2360,6 +2364,7 @@
                         <option value="待簽約" ${customer.簽約狀態 === '待簽約' ? 'selected' : ''}>待簽約</option>
                         <option value="已簽約" ${customer.簽約狀態 === '已簽約' ? 'selected' : ''}>已簽約</option>
                     </select></div>
+                    <div><label class="block text-xs font-bold text-gray-700 mb-1">備註</label><textarea name="成交備註" rows="3" maxlength="500" placeholder="是否有含贈品及裝潢，請填入品項及金額" class="w-full border border-gray-300 rounded-xl p-3 text-sm">${escapeHtml(customer.成交備註 || '')}</textarea></div>
                     <input type="hidden" name="成交狀態" value="正式成交">
                     <button type="submit" class="w-full action-pill action-deal py-3">儲存成交與簽約資料</button>
                 </form>`, '成交管理');
